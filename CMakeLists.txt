@@ -15,6 +15,7 @@ pico_sdk_init()
 add_executable(picones
     main.cpp
     hid_app.cpp
+    tar.cpp
 )
 
 pico_set_program_name(picones "picones")

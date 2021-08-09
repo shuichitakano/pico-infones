@@ -24,6 +24,7 @@
 #include <dvi/dvi.h>
 #include <tusb.h>
 #include <gamepad.h>
+#include "rom_selector.h"
 
 const uint LED_PIN = PICO_DEFAULT_LED_PIN;
 
@@ -36,6 +37,11 @@ namespace
     };
 
     std::unique_ptr<dvi::DVI> dvi_;
+
+    static constexpr uintptr_t NES_FILE_ADDR = 0x10100000;
+    static constexpr uintptr_t SRAM_FILE_ADDR = NES_FILE_ADDR - SRAM_SIZE;
+
+    ROMSelector romSelector_;
 }
 
 const WORD __not_in_flash_func(NesPalette)[64] = {
@@ -48,62 +54,86 @@ const WORD __not_in_flash_func(NesPalette)[64] = {
     0x7fff, 0x579f, 0x635f, 0x6b3f, 0x7f1f, 0x7f1b, 0x7ef6, 0x7f75,
     0x7f94, 0x73f4, 0x57d7, 0x5bf9, 0x4ffe, 0x0000, 0x0000, 0x0000};
 
-int InfoNES_Menu() { return 0; }
-
 void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
 {
+    static constexpr int LEFT = 1 << 6;
+    static constexpr int RIGHT = 1 << 7;
+    static constexpr int UP = 1 << 4;
+    static constexpr int DOWN = 1 << 5;
+    static constexpr int SELECT = 1 << 2;
+    static constexpr int START = 1 << 3;
+    static constexpr int A = 1 << 0;
+    static constexpr int B = 1 << 1;
+
+    static DWORD prevP1 = 0;
+
     for (int i = 0; i < 2; ++i)
     {
         auto &dst = i == 0 ? *pdwPad1 : *pdwPad2;
         auto &gp = io::getCurrentGamePadState(i);
         dst = 0;
+
         if (gp.axis[0] < 64)
         {
-            // left
-            dst |= 1 << 6;
+            dst |= LEFT;
         }
         else if (gp.axis[0] > 192)
         {
-            // right
-            dst |= 1 << 7;
+            dst |= RIGHT;
         }
-        else if (gp.axis[1] < 64)
+
+        if (gp.axis[1] < 64)
         {
-            // up
-            dst |= 1 << 4;
+            dst |= UP;
         }
         else if (gp.axis[1] > 192)
         {
-            // down
-            dst |= 1 << 5;
+            dst |= DOWN;
         }
 
         if (gp.buttons & 0x40)
         {
-            // select
-            dst |= 1 << 2;
+            dst |= SELECT;
         }
         if (gp.buttons & 0x80)
         {
-            // start
-            dst |= 1 << 3;
+            dst |= START;
         }
         if (gp.buttons & 0x01)
         {
-            // A
-            dst |= 1 << 0;
+            dst |= A;
         }
         if (gp.buttons & 0x02)
         {
-            // B
-            dst |= 1 << 1;
+            dst |= B;
         }
     }
 
-    //    printf("pad = %02x %02x\n", *pdwPad1, *pdwPad2);
-    // *pdwPad1 = 0;
-    // *pdwPad2 = 0;
-    *pdwSystem = 0;
+    bool reset = false;
+    {
+        auto p1 = *pdwPad1;
+        auto pushed = p1 & ~prevP1;
+        if (p1 & SELECT)
+        {
+            if (pushed & LEFT)
+            {
+                romSelector_.prev();
+                reset = true;
+            }
+            if (pushed & RIGHT)
+            {
+                romSelector_.next();
+                reset = true;
+            }
+            if ((pushed & START) && (p1 & A) && (p1 & B))
+            {
+                reset = true;
+            }
+        }
+    }
+
+    *pdwSystem = reset ? PAD_SYS_QUIT : 0;
+    prevP1 = *pdwPad1;
 }
 
 void InfoNES_MessageBox(const char *pszMsg, ...)
@@ -119,7 +149,7 @@ void InfoNES_MessageBox(const char *pszMsg, ...)
 bool parseROM(const uint8_t *nesFile)
 {
     memcpy(&NesHeader, nesFile, sizeof(NesHeader));
-    if (memcmp(NesHeader.byID, "NES\x1a", 4) != 0)
+    if (!checkNESMagic(NesHeader.byID))
     {
         return false;
     }
@@ -239,6 +269,37 @@ void __not_in_flash_func(InfoNES_PostDrawLine)()
     currentLineBuffer_ = nullptr;
 }
 
+bool loadAndReset()
+{
+    auto rom = romSelector_.getCurrentROM();
+    if (!rom)
+    {
+        printf("ROM does not exists.\n");
+        return false;
+    }
+
+    if (!parseROM(rom))
+    {
+        printf("NES file parse error.\n");
+        return false;
+    }
+
+    if (InfoNES_Reset() < 0)
+    {
+        printf("NES reset error.\n");
+        return false;
+    }
+
+    return true;
+}
+
+int InfoNES_Menu()
+{
+    // InfoNES_Main() のループで最初に呼ばれる
+    loadAndReset();
+    return 0;
+}
+
 void __not_in_flash_func(core1_main)()
 {
     dvi_->registerIRQThisCore();
@@ -263,22 +324,16 @@ int main()
 
     tusb_init();
 
-    static constexpr uintptr_t NES_FILE_ADDR = 0x10100000;
-    static constexpr uintptr_t SRAM_FILE_ADDR = NES_FILE_ADDR - SRAM_SIZE;
+    romSelector_.init(NES_FILE_ADDR);
 
     //    util::dumpMemory((void *)NES_FILE_ADDR, 1024);
-    if (!parseROM((const uint8_t *)NES_FILE_ADDR))
+
+    /*
+    if (!loadAndReset())
     {
-        printf("NES file parse error.\n");
         return -1;
     }
-
-    if (InfoNES_Reset() < 0)
-    {
-        printf("NES reset error.\n");
-        return -1;
-    }
-
+*/
     //
     dvi_ = std::make_unique<dvi::DVI>(pio0, &dviConfig_, dvi::getTiming640x480p60Hz());
     //    dvi_->setAudioFreq(48000, 25200, 6144);
