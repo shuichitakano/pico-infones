@@ -257,7 +257,7 @@ void __not_in_flash_func(InfoNES_PreDrawLine)(int line)
 {
     auto b = dvi_->getLineBuffer();
     InfoNES_SetLineBuffer(b->data() + 32, b->size());
-    (*b)[319] = line + dvi_->getFrameCounter();
+    //    (*b)[319] = line + dvi_->getFrameCounter();
 
     currentLineBuffer_ = b;
 }
@@ -340,26 +340,9 @@ int main()
     dvi_->setAudioFreq(44100, 28000, 6272);
     dvi_->allocateAudioBuffer(1024);
 
-#if 0
-    int32_t dividend = 123456;
-    int32_t divisor = -321;
-    // This is the recommended signed fast divider for general use.
-    divmod_result_t result = hw_divider_divmod_s32(dividend, divisor);
-    printf("%d/%d = %d remainder %d\n", dividend, divisor, to_quotient_s32(result), to_remainder_s32(result));
-    // This is the recommended unsigned fast divider for general use.
-    int32_t udividend = 123456;
-    int32_t udivisor = 321;
-    divmod_result_t uresult = hw_divider_divmod_u32(udividend, udivisor);
-    printf("%d/%d = %d remainder %d\n", udividend, udivisor, to_quotient_u32(uresult), to_remainder_u32(uresult));
-
-    // Interpolator example code
-    interp_config cfg = interp_default_config();
-    // Now use the various interpolator library functions for your use case
-    // e.g. interp_config_clamp(&cfg, true);
-    //      interp_config_shift(&cfg, 2);
-    // Then set the config
-    interp_set_config(interp0, 0, &cfg);
-#endif
+    dvi_->getBlankSettings().top = 8 * 2;
+    dvi_->getBlankSettings().bottom = 8 * 2;
+    dvi_->setScanLine(true);
 
     multicore_launch_core1(core1_main);
 

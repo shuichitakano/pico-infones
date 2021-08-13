@@ -42,6 +42,7 @@
 #include "K6502.h"
 #include <assert.h>
 #include <pico.h>
+#include <tuple>
 
 /*-------------------------------------------------------------------*/
 /*  NES resources                                                    */
@@ -226,7 +227,7 @@ void (*MapperVSync)();
 /* Callback at HSync */
 void (*MapperHSync)();
 /* Callback at PPU read/write */
-void (*MapperPPU)(WORD wAddr);
+void (*MapperPPU)(WORD wAddr); // mapper 96だけ？
 /* Callback at Rendering Screen 1:BG, 0:Sprite */
 void (*MapperRenderScreen)(BYTE byMode);
 
@@ -673,9 +674,13 @@ int __not_in_flash_func(InfoNES_HSync)()
   if (FrameCnt == 0 &&
       PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN)
   {
-    InfoNES_PreDrawLine(PPU_Scanline);
-    InfoNES_DrawLine();
-    InfoNES_PostDrawLine();
+    if (PPU_Scanline >= 8 && PPU_Scanline < 240 - 8)
+    {
+      InfoNES_PreDrawLine(PPU_Scanline);
+      InfoNES_DrawLine();
+      InfoNES_PostDrawLine();
+    }
+    // todo スプライトオーバーレジスタとかは反映する必要がある
   }
 
   /*-------------------------------------------------------------------*/
@@ -760,6 +765,8 @@ int __not_in_flash_func(InfoNES_HSync)()
   return 0;
 }
 
+//#pragma GCC optimize("O2")
+
 /*===================================================================*/
 /*                                                                   */
 /*              InfoNES_DrawLine() : Render a scanline               */
@@ -820,6 +827,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       ++nY;
       nYBit &= 7;
     }
+    const int yOfsModBG = nYBit;
     nYBit <<= 3;
 
     if (nY > 29)
@@ -833,6 +841,23 @@ void __not_in_flash_func(InfoNES_DrawLine)()
 
     nY4 = ((nY & 2) << 1);
 
+    //
+    const int patternTableIdBG = PPU_R0 & R0_BG_ADDR ? 1 : 0;
+    const int bankOfsBG = patternTableIdBG << 2;
+
+    // auto getPatBG = [&](int ch)
+    //     -> std::tuple<int, int> __attribute__((always_inline))
+    // {
+    //   const int bank = (ch >> 6) + bankOfsBG;
+    //   const int addrOfs = ((ch & 63) << 4) + yOfsModBG;
+    //   const auto data = PPUBANK[bank] + addrOfs;
+    //   const auto pl0 = data[0];
+    //   const auto pl1 = data[8];
+    //   const auto pat0 = (pl0 & 0x55) | ((pl1 << 1) & 0xaa);
+    //   const auto pat1 = ((pl0 >> 1) & 0x55) | (pl1 & 0xaa);
+    //   return {pat0, pat1};
+    // };
+
     /*-------------------------------------------------------------------*/
     /*  Rendering of the block of the left end                           */
     /*-------------------------------------------------------------------*/
@@ -840,12 +865,50 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     pbyNameTable = PPUBANK[nNameTable] + nY * 32 + nX;
     pbyChrData = PPU_BG_Base + (*pbyNameTable << 6) + nYBit;
     pAttrBase = PPUBANK[nNameTable] + 0x3c0 + (nY / 4) * 8;
+#if 0
     pPalTbl = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
 
     for (nIdx = PPU_Scr_H_Bit; nIdx < 8; ++nIdx)
     {
       *(pPoint++) = pPalTbl[pbyChrData[nIdx]];
     }
+#else
+    {
+      pPoint += 8 - PPU_Scr_H_Bit;
+
+      const auto pal = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
+      const int ch = *pbyNameTable;
+      const int bank = (ch >> 6) + bankOfsBG;
+      const int addrOfs = ((ch & 63) << 4) + yOfsModBG;
+      const auto data = PPUBANK[bank] + addrOfs;
+      const auto pl0 = data[0];
+      const auto pl1 = data[8];
+      const auto pat0 = (pl0 & 0x55) | ((pl1 << 1) & 0xaa);
+      const auto pat1 = ((pl0 >> 1) & 0x55) | (pl1 & 0xaa);
+      //      const auto [pat0, pat1] = getPatBG(ch);
+      switch (PPU_Scr_H_Bit)
+      {
+      case 0:
+        pPoint[-8] = pal[(pat1 >> 6) & 3];
+      case 1:
+        pPoint[-7] = pal[(pat0 >> 6) & 3];
+      case 2:
+        pPoint[-6] = pal[(pat1 >> 4) & 3];
+      case 3:
+        pPoint[-5] = pal[(pat0 >> 4) & 3];
+      case 4:
+        pPoint[-4] = pal[(pat1 >> 2) & 3];
+      case 5:
+        pPoint[-3] = pal[(pat0 >> 2) & 3];
+      case 6:
+        pPoint[-2] = pal[(pat1 >> 0) & 3];
+      case 7:
+        pPoint[-1] = pal[(pat0 >> 0) & 3];
+      default:
+        break;
+      }
+    }
+#endif
 
     // Callback at PPU read/write
     MapperPPU(PATTBL(pbyChrData));
@@ -857,8 +920,32 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     /*  Rendering of the left table                                      */
     /*-------------------------------------------------------------------*/
 
+    auto putBG = [&](int nX) __attribute__((always_inline))
+    {
+      const auto pal = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
+      const int ch = *pbyNameTable;
+      const int bank = (ch >> 6) + bankOfsBG;
+      const int addrOfs = ((ch & 63) << 4) + yOfsModBG;
+      const auto data = PPUBANK[bank] + addrOfs;
+      const auto pl0 = data[0];
+      const auto pl1 = data[8];
+      const auto pat0 = (pl0 & 0x55) | ((pl1 << 1) & 0xaa);
+      const auto pat1 = ((pl0 >> 1) & 0x55) | (pl1 & 0xaa);
+      //      auto [pat0, pat1] = getPatBG(ch);
+      pPoint[0] = pal[(pat1 >> 6) & 3];
+      pPoint[1] = pal[(pat0 >> 6) & 3];
+      pPoint[2] = pal[(pat1 >> 4) & 3];
+      pPoint[3] = pal[(pat0 >> 4) & 3];
+      pPoint[4] = pal[(pat1 >> 2) & 3];
+      pPoint[5] = pal[(pat0 >> 2) & 3];
+      pPoint[6] = pal[(pat1 >> 0) & 3];
+      pPoint[7] = pal[(pat0 >> 0) & 3];
+      pPoint += 8;
+    };
+
     for (; nX < 32; ++nX)
     {
+#if 0
       pbyChrData = PPU_BG_Base + (*pbyNameTable << 6) + nYBit;
       pPalTbl = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
 
@@ -871,6 +958,9 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       pPoint[6] = pPalTbl[pbyChrData[6]];
       pPoint[7] = pPalTbl[pbyChrData[7]];
       pPoint += 8;
+#else
+      putBG(nX);
+#endif
 
       // Callback at PPU read/write
       MapperPPU(PATTBL(pbyChrData));
@@ -890,6 +980,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
 
     for (nX = 0; nX < PPU_Scr_H_Byte; ++nX)
     {
+#if 0
       pbyChrData = PPU_BG_Base + (*pbyNameTable << 6) + nYBit;
       pPalTbl = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
 
@@ -902,6 +993,9 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       pPoint[6] = pPalTbl[pbyChrData[6]];
       pPoint[7] = pPalTbl[pbyChrData[7]];
       pPoint += 8;
+#else
+      putBG(nX);
+#endif
 
       // Callback at PPU read/write
       MapperPPU(PATTBL(pbyChrData));
@@ -913,12 +1007,50 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     /*  Rendering of the block of the right end                          */
     /*-------------------------------------------------------------------*/
 
+#if 0
     pbyChrData = PPU_BG_Base + (*pbyNameTable << 6) + nYBit;
     pPalTbl = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
     for (nIdx = 0; nIdx < PPU_Scr_H_Bit; ++nIdx)
     {
       pPoint[nIdx] = pPalTbl[pbyChrData[nIdx]];
     }
+#else
+    {
+      const auto pal = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
+      const int ch = *pbyNameTable;
+      const int bank = (ch >> 6) + bankOfsBG;
+      const int addrOfs = ((ch & 63) << 4) + yOfsModBG;
+      const auto data = PPUBANK[bank] + addrOfs;
+      const auto pl0 = data[0];
+      const auto pl1 = data[8];
+      const auto pat0 = (pl0 & 0x55) | ((pl1 << 1) & 0xaa);
+      const auto pat1 = ((pl0 >> 1) & 0x55) | (pl1 & 0xaa);
+      //      const auto [pat0, pat1] = getPatBG(ch);
+      switch (PPU_Scr_H_Bit)
+      {
+      case 8:
+        pPoint[7] = pal[(pat0 >> 0) & 3];
+      case 7:
+        pPoint[6] = pal[(pat1 >> 0) & 3];
+      case 6:
+        pPoint[5] = pal[(pat0 >> 2) & 3];
+      case 5:
+        pPoint[4] = pal[(pat1 >> 2) & 3];
+      case 4:
+        pPoint[3] = pal[(pat0 >> 4) & 3];
+      case 3:
+        pPoint[2] = pal[(pat1 >> 4) & 3];
+      case 2:
+        pPoint[1] = pal[(pat0 >> 6) & 3];
+      case 1:
+        pPoint[0] = pal[(pat1 >> 6) & 3];
+      default:
+        break;
+      }
+
+      //      pPoint += PPU_Scr_H_Bit;
+    }
+#endif
 
     // Callback at PPU read/write
     MapperPPU(PATTBL(pbyChrData));
@@ -931,7 +1063,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       WORD *pPointTop;
 
       // pPointTop = &WorkFrame[PPU_Scanline * NES_DISP_WIDTH];
-      pPoint = WorkLine;
+      pPointTop = WorkLine;
       InfoNES_MemorySet(pPointTop, 0, 8 << 1);
     }
 
@@ -944,7 +1076,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       WORD *pPointTop;
 
       // pPointTop = &WorkFrame[PPU_Scanline * NES_DISP_WIDTH];
-      pPoint = WorkLine;
+      pPointTop = WorkLine;
       InfoNES_MemorySet(pPointTop, 0, NES_DISP_WIDTH << 1);
     }
   }
@@ -964,6 +1096,9 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     // Reset sprite buffer
     InfoNES_MemorySet(pSprBuf, 0, sizeof pSprBuf);
 
+    const int patternTableIdSP88 = PPU_R0 & R0_SP_ADDR ? 1 : 0;
+    const int bankOfsSP88 = patternTableIdSP88 << 2;
+
     // Render a sprite to the sprite buffer
     nSprCnt = 0;
     for (pSPRRAM = SPRRAM + (63 << 2); pSPRRAM >= SPRRAM; pSPRRAM -= 4)
@@ -981,8 +1116,11 @@ void __not_in_flash_func(InfoNES_DrawLine)()
 
       nAttr = pSPRRAM[SPR_ATTR];
       nYBit = PPU_Scanline - nY;
-      nYBit = (nAttr & SPR_ATTR_V_FLIP) ? (PPU_SP_Height - nYBit - 1) << 3 : nYBit << 3;
+      nYBit = (nAttr & SPR_ATTR_V_FLIP) ? (PPU_SP_Height - nYBit - 1) : nYBit;
+      const int yOfsModSP = nYBit;
+      nYBit <<= 3;
 
+#if 0
       if (PPU_R0 & R0_SP_SIZE)
       {
         // Sprite size 8x16
@@ -1045,6 +1183,108 @@ void __not_in_flash_func(InfoNES_DrawLine)()
         if (pbyChrData[7])
           pSprBuf[nX + 7] = bySprCol | pbyChrData[7];
       }
+#else
+      int ch = pSPRRAM[SPR_CHR];
+
+      int bankOfs;
+      if (PPU_R0 & R0_SP_SIZE)
+      {
+        // 8x16
+        bankOfs = (ch & 1) << 2;
+        ch &= 0xfe;
+      }
+      else
+      {
+        // 8x8
+        bankOfs = bankOfsSP88;
+      }
+
+      const int bank = (ch >> 6) + bankOfs;
+      const int addrOfs = ((ch & 63) << 4) + ((yOfsModSP & 8) << 1) + (yOfsModSP & 7);
+      const auto data = PPUBANK[bank] + addrOfs;
+      const auto pl0 = data[0];
+      const auto pl1 = data[8];
+      const auto pat0 = (pl0 & 0x55) | ((pl1 << 1) & 0xaa);
+      const auto pat1 = ((pl0 >> 1) & 0x55) | (pl1 & 0xaa);
+
+      nAttr ^= SPR_ATTR_PRI;
+      bySprCol = (nAttr & (SPR_ATTR_COLOR | SPR_ATTR_PRI)) << 2;
+      nX = pSPRRAM[SPR_X];
+      const auto dst = pSprBuf + nX;
+
+      if (nAttr & SPR_ATTR_H_FLIP)
+      {
+        // h flip
+        if (int v = (pat1 >> 6) & 3)
+        {
+          dst[7] = bySprCol | v;
+        }
+        if (int v = (pat0 >> 6) & 3)
+        {
+          dst[6] = bySprCol | v;
+        }
+        if (int v = (pat1 >> 4) & 3)
+        {
+          dst[5] = bySprCol | v;
+        }
+        if (int v = (pat0 >> 4) & 3)
+        {
+          dst[4] = bySprCol | v;
+        }
+        if (int v = (pat1 >> 2) & 3)
+        {
+          dst[3] = bySprCol | v;
+        }
+        if (int v = (pat0 >> 2) & 3)
+        {
+          dst[2] = bySprCol | v;
+        }
+        if (int v = (pat1 >> 0) & 3)
+        {
+          dst[1] = bySprCol | v;
+        }
+        if (int v = (pat0 >> 0) & 3)
+        {
+          dst[0] = bySprCol | v;
+        }
+      }
+      else
+      {
+        // non flip
+        if (int v = (pat1 >> 6) & 3)
+        {
+          dst[0] = bySprCol | v;
+        }
+        if (int v = (pat0 >> 6) & 3)
+        {
+          dst[1] = bySprCol | v;
+        }
+        if (int v = (pat1 >> 4) & 3)
+        {
+          dst[2] = bySprCol | v;
+        }
+        if (int v = (pat0 >> 4) & 3)
+        {
+          dst[3] = bySprCol | v;
+        }
+        if (int v = (pat1 >> 2) & 3)
+        {
+          dst[4] = bySprCol | v;
+        }
+        if (int v = (pat0 >> 2) & 3)
+        {
+          dst[5] = bySprCol | v;
+        }
+        if (int v = (pat1 >> 0) & 3)
+        {
+          dst[6] = bySprCol | v;
+        }
+        if (int v = (pat0 >> 0) & 3)
+        {
+          dst[7] = bySprCol | v;
+        }
+      }
+#endif
     }
 
     // Rendering sprite
@@ -1066,7 +1306,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       WORD *pPointTop;
 
       // pPointTop = &WorkFrame[PPU_Scanline * NES_DISP_WIDTH];
-      pPoint = WorkLine;
+      pPointTop = WorkLine;
       InfoNES_MemorySet(pPointTop, 0, 8 << 1);
     }
 
@@ -1080,13 +1320,14 @@ void __not_in_flash_func(InfoNES_DrawLine)()
 /* InfoNES_GetSprHitY() : Get a position of scanline hits sprite #0  */
 /*                                                                   */
 /*===================================================================*/
-void InfoNES_GetSprHitY()
+void __not_in_flash_func(InfoNES_GetSprHitY)()
 {
   /*
  * Get a position of scanline hits sprite #0
  *
  */
 
+#if 0
   int nYBit;
   DWORD *pdwChrData;
   int nOff;
@@ -1140,6 +1381,65 @@ void InfoNES_GetSprHitY()
     // Scanline didn't hit sprite #0
     SpriteJustHit = SCAN_UNKNOWN_START + 1;
   }
+#else
+  const int patternTableIdSP88 = PPU_R0 & R0_SP_ADDR ? 1 : 0;
+  const int bankOfsSP88 = patternTableIdSP88 << 2;
+
+  int yOfsMod;
+  int stride;
+  if (SPRRAM[SPR_ATTR] & SPR_ATTR_V_FLIP)
+  {
+    // Vertical flip
+    yOfsMod = PPU_SP_Height - 1;
+    stride = -1;
+  }
+  else
+  {
+    // Non flip
+    yOfsMod = 0;
+    stride = 1;
+  }
+
+  int ch = SPRRAM[SPR_CHR];
+
+  int bankOfs;
+  if (PPU_R0 & R0_SP_SIZE)
+  {
+    // 8x16
+    bankOfs = (ch & 1) << 2;
+    ch &= 0xfe;
+  }
+  else
+  {
+    // 8x8
+    bankOfs = bankOfsSP88;
+  }
+
+  const int bank = (ch >> 6) + bankOfs;
+  const int addrOfs = ((ch & 63) << 4) + ((yOfsMod & 8) << 1) + (yOfsMod & 7);
+
+  auto *data = PPUBANK[bank] + addrOfs;
+
+  if ((SPRRAM[SPR_Y] + 1 <= SCAN_UNKNOWN_START) && (SPRRAM[SPR_Y] > 0))
+  {
+    for (int nLine = 0; nLine < PPU_SP_Height; nLine++)
+    {
+      if (data[0] | data[8])
+      {
+        // Scanline hits sprite #0
+        SpriteJustHit = SPRRAM[SPR_Y] + 1 + nLine;
+        nLine = SCAN_VBLANK_END;
+      }
+      data += stride;
+    }
+  }
+  else
+  {
+    // Scanline didn't hit sprite #0
+    SpriteJustHit = SCAN_UNKNOWN_START + 1;
+  }
+
+#endif
 }
 
 /*===================================================================*/
@@ -1154,6 +1454,7 @@ void __not_in_flash_func(InfoNES_SetupChr)()
  *
  */
 
+#if 0
   BYTE *pbyBGData;
   BYTE byData1;
   BYTE byData2;
@@ -1203,4 +1504,5 @@ void __not_in_flash_func(InfoNES_SetupChr)()
 
   // Reset update flag
   ChrBufUpdate = 0;
+#endif
 }
