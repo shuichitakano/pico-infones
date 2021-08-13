@@ -40,44 +40,46 @@ void Map0_Init()
   SRAMBANK = SRAM;
 
   /* Set ROM Banks */
-  if ( NesHeader.byRomSize > 1 )
+  if (NesHeader.byRomSize > 1)
   {
-    ROMBANK0 = ROMPAGE( 0 );
-    ROMBANK1 = ROMPAGE( 1 );
-    ROMBANK2 = ROMPAGE( 2 );
-    ROMBANK3 = ROMPAGE( 3 );
+    ROMBANK0 = ROMPAGE(0);
+    ROMBANK1 = ROMPAGE(1);
+    ROMBANK2 = ROMPAGE(2);
+    ROMBANK3 = ROMPAGE(3);
   }
-  else if ( NesHeader.byRomSize > 0 )
+  else if (NesHeader.byRomSize > 0)
   {
-    ROMBANK0 = ROMPAGE( 0 );
-    ROMBANK1 = ROMPAGE( 1 );
-    ROMBANK2 = ROMPAGE( 0 );
-    ROMBANK3 = ROMPAGE( 1 );
-  } else {
-    ROMBANK0 = ROMPAGE( 0 );
-    ROMBANK1 = ROMPAGE( 0 );
-    ROMBANK2 = ROMPAGE( 0 );
-    ROMBANK3 = ROMPAGE( 0 );
+    ROMBANK0 = ROMPAGE(0);
+    ROMBANK1 = ROMPAGE(1);
+    ROMBANK2 = ROMPAGE(0);
+    ROMBANK3 = ROMPAGE(1);
+  }
+  else
+  {
+    ROMBANK0 = ROMPAGE(0);
+    ROMBANK1 = ROMPAGE(0);
+    ROMBANK2 = ROMPAGE(0);
+    ROMBANK3 = ROMPAGE(0);
   }
 
   /* Set PPU Banks */
-  if ( NesHeader.byVRomSize > 0 )
+  if (NesHeader.byVRomSize > 0)
   {
-    for ( int nPage = 0; nPage < 8; ++nPage )
-      PPUBANK[ nPage ] = VROMPAGE( nPage );
+    for (int nPage = 0; nPage < 8; ++nPage)
+      PPUBANK[nPage] = VROMPAGE(nPage);
     InfoNES_SetupChr();
   }
 
   /* Set up wiring of the interrupt pin */
-  K6502_Set_Int_Wiring( 1, 1 ); 
+  K6502_Set_Int_Wiring(1, 1);
 }
 
 /*-------------------------------------------------------------------*/
 /*  Mapper 0 Write Function                                          */
 /*-------------------------------------------------------------------*/
-void Map0_Write( WORD wAddr, BYTE byData )
+void __not_in_flash_func(Map0_Write)(WORD wAddr, BYTE byData)
 {
-/*
+  /*
  *  Dummy Write to Mapper
  *
  */
@@ -86,9 +88,9 @@ void Map0_Write( WORD wAddr, BYTE byData )
 /*-------------------------------------------------------------------*/
 /*  Mapper 0 Write to SRAM Function                                  */
 /*-------------------------------------------------------------------*/
-void Map0_Sram( WORD wAddr, BYTE byData )
+void __not_in_flash_func(Map0_Sram)(WORD wAddr, BYTE byData)
 {
-/*
+  /*
  *  Dummy Write to Sram
  *
  */
@@ -97,9 +99,9 @@ void Map0_Sram( WORD wAddr, BYTE byData )
 /*-------------------------------------------------------------------*/
 /*  Mapper 0 Write to APU Function                                   */
 /*-------------------------------------------------------------------*/
-void Map0_Apu( WORD wAddr, BYTE byData )
+void __not_in_flash_func(Map0_Apu)(WORD wAddr, BYTE byData)
 {
-/*
+  /*
  *  Dummy Write to Apu
  *
  */
@@ -108,21 +110,21 @@ void Map0_Apu( WORD wAddr, BYTE byData )
 /*-------------------------------------------------------------------*/
 /*  Mapper 0 Read from APU Function                                  */
 /*-------------------------------------------------------------------*/
-BYTE Map0_ReadApu( WORD wAddr )
+BYTE __not_in_flash_func(Map0_ReadApu)(WORD wAddr)
 {
-/*
+  /*
  *  Dummy Read from Apu
  *
  */
-  return ( wAddr >> 8 );
+  return (wAddr >> 8);
 }
 
 /*-------------------------------------------------------------------*/
 /*  Mapper 0 V-Sync Function                                         */
 /*-------------------------------------------------------------------*/
-void Map0_VSync()
+void __not_in_flash_func(Map0_VSync)()
 {
-/*
+  /*
  *  Dummy Callback at VSync
  *
  */
@@ -131,7 +133,7 @@ void Map0_VSync()
 /*-------------------------------------------------------------------*/
 /*  Mapper 0 H-Sync Function                                         */
 /*-------------------------------------------------------------------*/
-void Map0_HSync()
+void __not_in_flash_func(Map0_HSync)()
 {
 /*
  *  Dummy Callback at HSync
@@ -152,9 +154,9 @@ void Map0_HSync()
 /*-------------------------------------------------------------------*/
 /*  Mapper 0 PPU Function                                            */
 /*-------------------------------------------------------------------*/
-void Map0_PPU( WORD wAddr )
+void __not_in_flash_func(Map0_PPU)(WORD wAddr)
 {
-/*
+  /*
  *  Dummy Callback at PPU
  *
  */
@@ -163,9 +165,9 @@ void Map0_PPU( WORD wAddr )
 /*-------------------------------------------------------------------*/
 /*  Mapper 0 Rendering Screen Function                               */
 /*-------------------------------------------------------------------*/
-void Map0_RenderScreen( BYTE byMode )
+void __not_in_flash_func(Map0_RenderScreen)(BYTE byMode)
 {
-/*
+  /*
  *  Dummy Callback at Rendering Screen
  *
  */
