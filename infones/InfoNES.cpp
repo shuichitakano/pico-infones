@@ -164,7 +164,7 @@ WORD WorkFrameIdx;
 #else
 //WORD WorkFrame[ NES_DISP_WIDTH * NES_DISP_HEIGHT ];
 WORD *WorkLine = nullptr;
-void InfoNES_SetLineBuffer(WORD *p, WORD size)
+void __not_in_flash_func(InfoNES_SetLineBuffer)(WORD *p, WORD size)
 {
   assert(size >= NES_DISP_WIDTH);
   WorkLine = p;
@@ -767,6 +767,40 @@ int __not_in_flash_func(InfoNES_HSync)()
 
 //#pragma GCC optimize("O2")
 
+namespace
+{
+  void __not_in_flash_func(compositeSprite)(const uint16_t *pal,
+                                            const uint8_t *spr,
+                                            uint16_t *buf)
+  {
+    auto sprEnd = spr + NES_DISP_WIDTH;
+    do
+    {
+      auto proc = [=](int i) __attribute__((always_inline))
+      {
+        int v = spr[i];
+        if (v && ((v >> 7) || (buf[i] >> 15)))
+        {
+          buf[i] = pal[v & 0xf];
+        }
+      };
+
+#if 1
+      proc(0);
+      proc(1);
+      proc(2);
+      proc(3);
+      buf += 4;
+      spr += 4;
+#else
+      proc(0);
+      buf += 1;
+      spr += 1;
+#endif
+    } while (spr < sprEnd);
+  }
+}
+
 /*===================================================================*/
 /*                                                                   */
 /*              InfoNES_DrawLine() : Render a scanline               */
@@ -923,23 +957,40 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     auto putBG = [&](int nX) __attribute__((always_inline))
     {
       const auto pal = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
+      const auto palAddr = reinterpret_cast<uintptr_t>(pal);
       const int ch = *pbyNameTable;
       const int bank = (ch >> 6) + bankOfsBG;
       const int addrOfs = ((ch & 63) << 4) + yOfsModBG;
       const auto data = PPUBANK[bank] + addrOfs;
       const auto pl0 = data[0];
       const auto pl1 = data[8];
-      const auto pat0 = (pl0 & 0x55) | ((pl1 << 1) & 0xaa);
-      const auto pat1 = ((pl0 >> 1) & 0x55) | (pl1 & 0xaa);
-      //      auto [pat0, pat1] = getPatBG(ch);
-      pPoint[0] = pal[(pat1 >> 6) & 3];
-      pPoint[1] = pal[(pat0 >> 6) & 3];
-      pPoint[2] = pal[(pat1 >> 4) & 3];
-      pPoint[3] = pal[(pat0 >> 4) & 3];
-      pPoint[4] = pal[(pat1 >> 2) & 3];
-      pPoint[5] = pal[(pat0 >> 2) & 3];
-      pPoint[6] = pal[(pat1 >> 0) & 3];
-      pPoint[7] = pal[(pat0 >> 0) & 3];
+      // const auto pat0 = (pl0 & 0x55) | ((pl1 << 1) & 0xaa);
+      // const auto pat1 = ((pl0 >> 1) & 0x55) | (pl1 & 0xaa);
+      const auto pat0 = ((pl0 & 0x55) << 1) | ((pl1 & 0x55) << 2);
+      const auto pat1 = ((pl0 & 0xaa) << 0) | ((pl1 & 0xaa) << 1);
+
+#if 1
+      auto readPal = [&](int ofs) {
+        return *reinterpret_cast<const WORD *>(palAddr + ofs);
+      };
+      pPoint[0] = readPal((pat1 >> 6) & 6);
+      pPoint[1] = readPal((pat0 >> 6) & 6);
+      pPoint[2] = readPal((pat1 >> 4) & 6);
+      pPoint[3] = readPal((pat0 >> 4) & 6);
+      pPoint[4] = readPal((pat1 >> 2) & 6);
+      pPoint[5] = readPal((pat0 >> 2) & 6);
+      pPoint[6] = readPal((pat1 >> 0) & 6);
+      pPoint[7] = readPal((pat0 >> 0) & 6);
+#else
+      pPoint[0] = pal[(pat1 >> 6) & 6];
+      pPoint[1] = pal[(pat0 >> 6) & 6];
+      pPoint[2] = pal[(pat1 >> 4) & 6];
+      pPoint[3] = pal[(pat0 >> 4) & 6];
+      pPoint[4] = pal[(pat1 >> 2) & 6];
+      pPoint[5] = pal[(pat0 >> 2) & 6];
+      pPoint[6] = pal[(pat1 >> 0) & 6];
+      pPoint[7] = pal[(pat0 >> 0) & 6];
+#endif
       pPoint += 8;
     };
 
@@ -1202,10 +1253,10 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       const int bank = (ch >> 6) + bankOfs;
       const int addrOfs = ((ch & 63) << 4) + ((yOfsModSP & 8) << 1) + (yOfsModSP & 7);
       const auto data = PPUBANK[bank] + addrOfs;
-      const auto pl0 = data[0];
-      const auto pl1 = data[8];
-      const auto pat0 = (pl0 & 0x55) | ((pl1 << 1) & 0xaa);
-      const auto pat1 = ((pl0 >> 1) & 0x55) | (pl1 & 0xaa);
+      const uint32_t pl0 = data[0];
+      const uint32_t pl1 = data[8];
+      const auto pat0 = ((pl0 & 0x55) << 24) | ((pl1 & 0x55) << 25);
+      const auto pat1 = ((pl0 & 0xaa) << 23) | ((pl1 & 0xaa) << 24);
 
       nAttr ^= SPR_ATTR_PRI;
       bySprCol = (nAttr & (SPR_ATTR_COLOR | SPR_ATTR_PRI)) << 2;
@@ -1215,35 +1266,35 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       if (nAttr & SPR_ATTR_H_FLIP)
       {
         // h flip
-        if (int v = (pat1 >> 6) & 3)
+        if (int v = (pat1 << 0) >> 30)
         {
           dst[7] = bySprCol | v;
         }
-        if (int v = (pat0 >> 6) & 3)
+        if (int v = (pat0 << 0) >> 30)
         {
           dst[6] = bySprCol | v;
         }
-        if (int v = (pat1 >> 4) & 3)
+        if (int v = (pat1 << 2) >> 30)
         {
           dst[5] = bySprCol | v;
         }
-        if (int v = (pat0 >> 4) & 3)
+        if (int v = (pat0 << 2) >> 30)
         {
           dst[4] = bySprCol | v;
         }
-        if (int v = (pat1 >> 2) & 3)
+        if (int v = (pat1 << 4) >> 30)
         {
           dst[3] = bySprCol | v;
         }
-        if (int v = (pat0 >> 2) & 3)
+        if (int v = (pat0 << 4) >> 30)
         {
           dst[2] = bySprCol | v;
         }
-        if (int v = (pat1 >> 0) & 3)
+        if (int v = (pat1 << 6) >> 30)
         {
           dst[1] = bySprCol | v;
         }
-        if (int v = (pat0 >> 0) & 3)
+        if (int v = (pat0 << 6) >> 30)
         {
           dst[0] = bySprCol | v;
         }
@@ -1251,35 +1302,35 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       else
       {
         // non flip
-        if (int v = (pat1 >> 6) & 3)
+        if (int v = (pat1 << 0) >> 30)
         {
           dst[0] = bySprCol | v;
         }
-        if (int v = (pat0 >> 6) & 3)
+        if (int v = (pat0 << 0) >> 30)
         {
           dst[1] = bySprCol | v;
         }
-        if (int v = (pat1 >> 4) & 3)
+        if (int v = (pat1 << 2) >> 30)
         {
           dst[2] = bySprCol | v;
         }
-        if (int v = (pat0 >> 4) & 3)
+        if (int v = (pat0 << 2) >> 30)
         {
           dst[3] = bySprCol | v;
         }
-        if (int v = (pat1 >> 2) & 3)
+        if (int v = (pat1 << 4) >> 30)
         {
           dst[4] = bySprCol | v;
         }
-        if (int v = (pat0 >> 2) & 3)
+        if (int v = (pat0 << 4) >> 30)
         {
           dst[5] = bySprCol | v;
         }
-        if (int v = (pat1 >> 0) & 3)
+        if (int v = (pat1 << 6) >> 30)
         {
           dst[6] = bySprCol | v;
         }
-        if (int v = (pat0 >> 0) & 3)
+        if (int v = (pat0 << 6) >> 30)
         {
           dst[7] = bySprCol | v;
         }
@@ -1289,14 +1340,42 @@ void __not_in_flash_func(InfoNES_DrawLine)()
 
     // Rendering sprite
     pPoint -= (NES_DISP_WIDTH - PPU_Scr_H_Bit);
-    for (nX = 0; nX < NES_DISP_WIDTH; ++nX)
+
+#if 1
+    compositeSprite(PalTable + 0x10, pSprBuf, pPoint);
+#else
     {
-      nSprData = pSprBuf[nX];
-      if (nSprData && (nSprData & 0x80 || pPoint[nX] & 0x8000))
+      const auto *pal = &PalTable[0x10];
+      const auto *spr = pSprBuf;
+      const auto *sprEnd = spr + NES_DISP_WIDTH;
+      //for (nX = 0; nX < NES_DISP_WIDTH; ++nX)
+      while (spr != sprEnd)
       {
-        pPoint[nX] = PalTable[(nSprData & 0xf) + 0x10];
+        //nSprData = pSprBuf[nX];
+        auto proc = [=](int i) __attribute__((always_inline))
+        {
+          int v = spr[i];
+          if (v && ((v >> 7) || (pPoint[i] >> 15)))
+          {
+            pPoint[i] = pal[v & 0xf];
+          }
+        };
+
+#if 1
+        proc(0);
+        proc(1);
+        proc(2);
+        proc(3);
+        pPoint += 4;
+        spr += 4;
+#else
+        proc(0);
+        pPoint += 1;
+        spr += 1;
+#endif
       }
     }
+#endif
 
     /*-------------------------------------------------------------------*/
     /*  Sprite Clipping                                                  */

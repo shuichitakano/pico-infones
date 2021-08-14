@@ -24,7 +24,7 @@
 /*            K6502_ReadZp() : Reading from the zero page            */
 /*                                                                   */
 /*===================================================================*/
-static inline BYTE __not_in_flash_func(K6502_ReadZp)(BYTE byAddr)
+static inline BYTE K6502_ReadZp(BYTE byAddr)
 {
   /*
  *  Reading from the zero page

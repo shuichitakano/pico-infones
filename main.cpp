@@ -217,8 +217,9 @@ void __not_in_flash_func(InfoNES_SoundOutput)(int samples, BYTE *wave1, BYTE *wa
             int w3 = *wave3++;
             int w4 = *wave4++;
             int w5 = *wave5++;
-            int l = w1 * 6 + w2 * 3 + w3 * 5 + w4 * 3 + w5 * 2;
-            int r = w1 * 3 + w2 * 6 + w3 * 5 + w4 * 3 + w5 * 2;
+            //w1 = w2 = w4 = 0;
+            int l = w1 * 6 + w2 * 3 + w3 * 5 + w4 * 3 + w5 * 2 * 16;
+            int r = w1 * 3 + w2 * 6 + w3 * 5 + w4 * 3 + w5 * 2 * 16;
             *p++ = {static_cast<short>(l), static_cast<short>(r)};
 
             // pulse_out = 0.00752 * (pulse1 + pulse2)
