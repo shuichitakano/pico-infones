@@ -1350,7 +1350,7 @@ void __not_in_flash_func(K6502_Step)(WORD wClocks)
 // Addressing Op.
 // Data
 // Absolute,X
-static inline BYTE K6502_ReadAbsX()
+static BYTE __not_in_flash_func(K6502_ReadAbsX)()
 {
   WORD wA0, wA1;
   wA0 = AA_ABS;
@@ -1359,7 +1359,7 @@ static inline BYTE K6502_ReadAbsX()
   return K6502_Read(wA1);
 };
 // Absolute,Y
-static inline BYTE K6502_ReadAbsY()
+static BYTE __not_in_flash_func(K6502_ReadAbsY)()
 {
   WORD wA0, wA1;
   wA0 = AA_ABS;
@@ -1368,7 +1368,7 @@ static inline BYTE K6502_ReadAbsY()
   return K6502_Read(wA1);
 };
 // (Indirect),Y
-static inline BYTE K6502_ReadIY()
+static BYTE __not_in_flash_func(K6502_ReadIY)()
 {
   WORD wA0, wA1;
   wA0 = K6502_ReadZpW(K6502_Read(PC++));
