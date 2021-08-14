@@ -341,8 +341,8 @@ int main()
     dvi_->setAudioFreq(44100, 28000, 6272);
     dvi_->allocateAudioBuffer(1024);
 
-    dvi_->getBlankSettings().top = 8 * 2;
-    dvi_->getBlankSettings().bottom = 8 * 2;
+    dvi_->getBlankSettings().top = 4 * 2;
+    dvi_->getBlankSettings().bottom = 4 * 2;
     dvi_->setScanLine(true);
 
     multicore_launch_core1(core1_main);
