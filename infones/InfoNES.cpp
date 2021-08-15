@@ -90,20 +90,20 @@ BYTE PPU_R3;
 BYTE PPU_R7;
 
 /* Vertical scroll value */
-BYTE PPU_Scr_V;
-BYTE PPU_Scr_V_Next;
+//BYTE PPU_Scr_V;
+//BYTE PPU_Scr_V_Next;
 BYTE PPU_Scr_V_Byte;
-BYTE PPU_Scr_V_Byte_Next;
+//BYTE PPU_Scr_V_Byte_Next;
 BYTE PPU_Scr_V_Bit;
-BYTE PPU_Scr_V_Bit_Next;
+//BYTE PPU_Scr_V_Bit_Next;
 
 /* Horizontal scroll value */
-BYTE PPU_Scr_H;
-BYTE PPU_Scr_H_Next;
+//BYTE PPU_Scr_H;
+//BYTE PPU_Scr_H_Next;
 BYTE PPU_Scr_H_Byte;
-BYTE PPU_Scr_H_Byte_Next;
+//BYTE PPU_Scr_H_Byte_Next;
 BYTE PPU_Scr_H_Bit;
-BYTE PPU_Scr_H_Bit_Next;
+//BYTE PPU_Scr_H_Bit_Next;
 
 /* PPU Address */
 WORD PPU_Addr;
@@ -489,8 +489,10 @@ void InfoNES_SetupPPU()
   FrameIRQ_Enable = 0;
 
   // Reset Scroll values
-  PPU_Scr_V = PPU_Scr_V_Next = PPU_Scr_V_Byte = PPU_Scr_V_Byte_Next = PPU_Scr_V_Bit = PPU_Scr_V_Bit_Next = 0;
-  PPU_Scr_H = PPU_Scr_H_Next = PPU_Scr_H_Byte = PPU_Scr_H_Byte_Next = PPU_Scr_H_Bit = PPU_Scr_H_Bit_Next = 0;
+  // PPU_Scr_V = PPU_Scr_V_Next = PPU_Scr_V_Byte = PPU_Scr_V_Byte_Next = PPU_Scr_V_Bit = PPU_Scr_V_Bit_Next = 0;
+  // PPU_Scr_H = PPU_Scr_H_Next = PPU_Scr_H_Byte = PPU_Scr_H_Byte_Next = PPU_Scr_H_Bit = PPU_Scr_H_Bit_Next = 0;
+  PPU_Scr_V_Byte = PPU_Scr_V_Bit = 0;
+  PPU_Scr_H_Byte = PPU_Scr_H_Bit = 0;
 
   // Reset PPU address
   PPU_Addr = 0;
@@ -594,8 +596,8 @@ void __not_in_flash_func(InfoNES_Cycle)()
  */
 
   // Set the PPU adress to the buffered value
-  if ((PPU_R1 & R1_SHOW_SP) || (PPU_R1 & R1_SHOW_SCR))
-    PPU_Addr = PPU_Temp;
+  // if ((PPU_R1 & R1_SHOW_SP) || (PPU_R1 & R1_SHOW_SCR))
+  //   PPU_Addr = PPU_Temp;
 
   // Emulation loop
   for (;;)
@@ -668,31 +670,68 @@ int __not_in_flash_func(InfoNES_HSync)()
   if (!APU_Mute)
     InfoNES_pAPUHsync();
 
+  int tmpv = (PPU_Addr >> 12) + ((PPU_Addr >> 5) << 3);
+  tmpv -= PPU_Scanline >= 240 ? 0 : PPU_Scanline;
+
+  PPU_Scr_V_Bit = tmpv & 7;
+  PPU_Scr_V_Byte = (tmpv >> 3) & 31;
+  PPU_Scr_H_Byte = PPU_Addr & 31;
+  PPU_NameTableBank = NAME_TABLE0 + ((PPU_Addr >> 10) & 3);
+
   /*-------------------------------------------------------------------*/
   /*  Render a scanline                                                */
   /*-------------------------------------------------------------------*/
   if (FrameCnt == 0 &&
       PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN)
   {
-    if (PPU_Scanline >= 8 && PPU_Scanline < 240 - 8)
+    if (PPU_Scanline >= 4 && PPU_Scanline < 240 - 4)
     {
       InfoNES_PreDrawLine(PPU_Scanline);
       InfoNES_DrawLine();
       InfoNES_PostDrawLine();
     }
-    // todo スプライトオーバーレジスタとかは反映する必要がある
+    // todo: 描画しないラインにもスプライトオーバーレジスタとかは反映する必要がある
   }
 
   /*-------------------------------------------------------------------*/
   /*  Set new scroll values                                            */
   /*-------------------------------------------------------------------*/
-  PPU_Scr_V = PPU_Scr_V_Next;
-  PPU_Scr_V_Byte = PPU_Scr_V_Byte_Next;
-  PPU_Scr_V_Bit = PPU_Scr_V_Bit_Next;
 
-  PPU_Scr_H = PPU_Scr_H_Next;
-  PPU_Scr_H_Byte = PPU_Scr_H_Byte_Next;
-  PPU_Scr_H_Bit = PPU_Scr_H_Bit_Next;
+  //  PPU_Scr_V = PPU_Scr_V_Next;
+  //PPU_Scr_V_Byte = PPU_Scr_V_Byte_Next;
+  //PPU_Scr_V_Bit = PPU_Scr_V_Bit_Next;
+
+  //  PPU_Scr_H = PPU_Scr_H_Next;
+  //PPU_Scr_H_Byte = PPU_Scr_H_Byte_Next;
+  //PPU_Scr_H_Bit = PPU_Scr_H_Bit_Next;
+
+  if ((PPU_R1 & R1_SHOW_SP) || (PPU_R1 & R1_SHOW_SCR))
+  {
+    if (PPU_Scanline == SCAN_VBLANK_END)
+    {
+      PPU_Addr = PPU_Temp;
+    }
+    else if (PPU_Scanline < SCAN_UNKNOWN_START)
+    {
+      PPU_Addr = (PPU_Addr & ~0b10000011111) |
+                 (PPU_Temp & 0b10000011111);
+
+      int v = (PPU_Addr >> 12) | ((PPU_Addr >> 2) & (31 << 3));
+      if (v == 29 * 8 + 7)
+      {
+        v = 0;
+        PPU_Addr ^= 0x800;
+      }
+      else if (v == 31 * 8 + 7)
+      {
+        v = 0;
+      }
+      else
+        ++v;
+      PPU_Addr = (PPU_Addr & ~0b111001111100000) |
+                 ((v & 7) << 12) | (((v >> 3) & 31) << 5);
+    }
+  }
 
   /*-------------------------------------------------------------------*/
   /*  Next Scanline                                                    */
@@ -852,8 +891,8 @@ void __not_in_flash_func(InfoNES_DrawLine)()
   {
     nNameTable = PPU_NameTableBank;
 
+#if 0
     nY = PPU_Scr_V_Byte + (PPU_Scanline >> 3);
-
     nYBit = PPU_Scr_V_Bit + (PPU_Scanline & 7);
 
     if (nYBit > 7)
@@ -870,6 +909,11 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       nNameTable ^= NAME_TABLE_V_MASK;
       nY -= 30;
     }
+#else
+    nY = (PPU_Addr >> 5) & 31;
+    const int yOfsModBG = PPU_Addr >> 12;
+    nYBit = yOfsModBG << 3;
+#endif
 
     nX = PPU_Scr_H_Byte;
 
@@ -878,19 +922,6 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     //
     const int patternTableIdBG = PPU_R0 & R0_BG_ADDR ? 1 : 0;
     const int bankOfsBG = patternTableIdBG << 2;
-
-    // auto getPatBG = [&](int ch)
-    //     -> std::tuple<int, int> __attribute__((always_inline))
-    // {
-    //   const int bank = (ch >> 6) + bankOfsBG;
-    //   const int addrOfs = ((ch & 63) << 4) + yOfsModBG;
-    //   const auto data = PPUBANK[bank] + addrOfs;
-    //   const auto pl0 = data[0];
-    //   const auto pl1 = data[8];
-    //   const auto pat0 = (pl0 & 0x55) | ((pl1 << 1) & 0xaa);
-    //   const auto pat1 = ((pl0 >> 1) & 0x55) | (pl1 & 0xaa);
-    //   return {pat0, pat1};
-    // };
 
     /*-------------------------------------------------------------------*/
     /*  Rendering of the block of the left end                           */
@@ -919,7 +950,6 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       const auto pl1 = data[8];
       const auto pat0 = (pl0 & 0x55) | ((pl1 << 1) & 0xaa);
       const auto pat1 = ((pl0 >> 1) & 0x55) | (pl1 & 0xaa);
-      //      const auto [pat0, pat1] = getPatBG(ch);
       switch (PPU_Scr_H_Bit)
       {
       case 0:
@@ -969,7 +999,6 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       const auto pat0 = ((pl0 & 0x55) << 1) | ((pl1 & 0x55) << 2);
       const auto pat1 = ((pl0 & 0xaa) << 0) | ((pl1 & 0xaa) << 1);
 
-#if 1
       auto readPal = [&](int ofs) {
         return *reinterpret_cast<const WORD *>(palAddr + ofs);
       };
@@ -981,16 +1010,6 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       pPoint[5] = readPal((pat0 >> 2) & 6);
       pPoint[6] = readPal((pat1 >> 0) & 6);
       pPoint[7] = readPal((pat0 >> 0) & 6);
-#else
-      pPoint[0] = pal[(pat1 >> 6) & 6];
-      pPoint[1] = pal[(pat0 >> 6) & 6];
-      pPoint[2] = pal[(pat1 >> 4) & 6];
-      pPoint[3] = pal[(pat0 >> 4) & 6];
-      pPoint[4] = pal[(pat1 >> 2) & 6];
-      pPoint[5] = pal[(pat0 >> 2) & 6];
-      pPoint[6] = pal[(pat1 >> 0) & 6];
-      pPoint[7] = pal[(pat0 >> 0) & 6];
-#endif
       pPoint += 8;
     };
 

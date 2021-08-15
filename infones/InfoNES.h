@@ -82,19 +82,19 @@ extern BYTE PPU_R2;
 extern BYTE PPU_R3;
 extern BYTE PPU_R7;
 
-extern BYTE PPU_Scr_V;
-extern BYTE PPU_Scr_V_Next;
+//extern BYTE PPU_Scr_V;
+//extern BYTE PPU_Scr_V_Next;
 extern BYTE PPU_Scr_V_Byte;
-extern BYTE PPU_Scr_V_Byte_Next;
+//extern BYTE PPU_Scr_V_Byte_Next;
 extern BYTE PPU_Scr_V_Bit;
-extern BYTE PPU_Scr_V_Bit_Next;
+//extern BYTE PPU_Scr_V_Bit_Next;
 
-extern BYTE PPU_Scr_H;
-extern BYTE PPU_Scr_H_Next;
+//extern BYTE PPU_Scr_H;
+//extern BYTE PPU_Scr_H_Next;
 extern BYTE PPU_Scr_H_Byte;
-extern BYTE PPU_Scr_H_Byte_Next;
+//extern BYTE PPU_Scr_H_Byte_Next;
 extern BYTE PPU_Scr_H_Bit;
-extern BYTE PPU_Scr_H_Bit_Next;
+//extern BYTE PPU_Scr_H_Bit_Next;
 
 extern BYTE PPU_Latch_Flag;
 extern WORD PPU_Addr;
@@ -141,6 +141,7 @@ extern BYTE PPU_UpDown_Clip;
 #define STEP_PER_FRAME 29828
 
 /* Develop Scroll Registers */
+#if 0
 #define InfoNES_SetupScr()                             \
   {                                                    \
     /* V-Scroll Register */                            \
@@ -153,6 +154,9 @@ extern BYTE PPU_UpDown_Clip;
     PPU_Scr_H_Byte_Next = PPU_Scr_H_Next >> 3;         \
     PPU_Scr_H_Bit_Next = PPU_Scr_H_Next & 0x07;        \
   }
+#else
+#define InfoNES_SetupScr()
+#endif
 
 /* Current Scanline */
 extern WORD PPU_Scanline;

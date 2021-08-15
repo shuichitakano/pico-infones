@@ -109,6 +109,7 @@ static inline BYTE __not_in_flash_func(K6502_Read)(WORD wAddr)
       {
         PPU_R0 &= ~R0_NAME_ADDR;
         PPU_NameTableBank = NAME_TABLE0;
+        PPU_Temp = PPU_Temp & 0xF3FF;
       }
       return byRet;
     }
@@ -261,9 +262,9 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
       if (PPU_Latch_Flag)
       {
         // V-Scroll Register
-        PPU_Scr_V_Next = (byData > 239) ? 0 : byData;
-        PPU_Scr_V_Byte_Next = PPU_Scr_V_Next >> 3;
-        PPU_Scr_V_Bit_Next = PPU_Scr_V_Next & 7;
+        //PPU_Scr_V_Next = (byData > 239) ? 0 : byData;
+        //PPU_Scr_V_Byte_Next = PPU_Scr_V_Next >> 3;
+        //PPU_Scr_V_Bit_Next = PPU_Scr_V_Next & 7;
 
         // Added : more Loopy Stuff
         PPU_Temp = (PPU_Temp & 0xFC1F) | ((((WORD)byData) & 0xF8) << 2);
@@ -272,9 +273,10 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
       else
       {
         // H-Scroll Register
-        PPU_Scr_H_Next = byData;
-        PPU_Scr_H_Byte_Next = PPU_Scr_H_Next >> 3;
-        PPU_Scr_H_Bit_Next = PPU_Scr_H_Next & 7;
+        //PPU_Scr_H_Next = byData;
+        //PPU_Scr_H_Byte_Next = PPU_Scr_H_Next >> 3;
+        //PPU_Scr_H_Bit_Next = PPU_Scr_H_Next & 7;
+        PPU_Scr_H_Bit = byData & 7;
 
         // Added : more Loopy Stuff
         PPU_Temp = (PPU_Temp & 0xFFE0) | ((((WORD)byData) & 0xF8) >> 3);
