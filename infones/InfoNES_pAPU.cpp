@@ -14,6 +14,7 @@
 #include "InfoNES_System.h"
 #include "InfoNES_pAPU.h"
 #include <algorithm>
+#include <string.h>
 
 /*-------------------------------------------------------------------*/
 /*   APU Event resources                                             */
@@ -125,14 +126,13 @@ struct ApuQualityData_t
     // {0xa2567000, 0xa2567000, 0xa2567000, 183, 164, 11025, 1062658},
     // {0x512b3800, 0x512b3800, 0x512b3800, 367, 82, 22050, 531329},
     // {0x289d9c00, 0x289d9c00, 0x289d9c00, 735, 41, 44100, 265664},
-    {0xa2567000, 0xa2567000, 0xa2567000, 45888, 164, 11025, 664935},
-    {0x512b3800, 0x512b3800, 0x512b3800, 91776, 82, 22050, 1329870},
-    {0x289d9c00, 0x289d9c00, 0x289d9c00, 183552, 41, 44100, 2659741},
+    {0xa2567000, 0xa2567000, 0xa2567000, 45963, 164, 11025, 664935},
+    {0x512b3800, 0x512b3800, 0x512b3800, 91926, 82, 22050, 1329870},
+    {0x289d9c00, 0x289d9c00, 0x289d9c00, 184035, 41, 44100, 2659741},
 };
 
-// 21477273/(262*341*4) = 60.098478319267535Hz
-// 44100/60.098/262 = 2.8 sample/line
-// 44100/60.098/262*65536 = 183551.1920860051
+// 44100/60/262*65536 = 183850.99236641222
+// (44100*1.001)/60/262*65536 = 184034.84335877863
 
 // cycle_rate
 // 1789773 / 44100 * 65536 = 2659740.665034014
@@ -140,7 +140,8 @@ struct ApuQualityData_t
 /*-------------------------------------------------------------------*/
 /*  Rectangle Wave #1 resources                                      */
 /*-------------------------------------------------------------------*/
-BYTE ApuC1a, ApuC1b, ApuC1c, ApuC1d;
+BYTE ApuC1a,
+    ApuC1b, ApuC1c, ApuC1d;
 
 BYTE *ApuC1Wave;
 DWORD ApuC1Skip;
@@ -1350,19 +1351,32 @@ void InfoNES_pAPUVsync()
 
 uint32_t leftSamples16 = 0;
 
-void __not_in_flash_func(InfoNES_pAPUHsync)()
+void __not_in_flash_func(InfoNES_pAPUHsync)(bool enabled)
 {
   auto n16 = ApuSamplesPerSync16 + leftSamples16;
   auto n = n16 >> 16;
   leftSamples16 = n16 - (n << 16);
 
-  ApuRenderingWave1(n);
-  ApuRenderingWave2(n);
-  ApuRenderingWave3(n);
-  ApuRenderingWave4(n);
-  ApuRenderingWave5(n);
+  int bufferLeft = InfoNES_GetSoundBufferSize();
+  n = std::min<int>(bufferLeft, n);
 
-  ApuCtrl = ApuCtrlNew;
+  if (enabled)
+  {
+    ApuRenderingWave1(n);
+    ApuRenderingWave2(n);
+    ApuRenderingWave3(n);
+    ApuRenderingWave4(n);
+    ApuRenderingWave5(n);
+    ApuCtrl = ApuCtrlNew;
+  }
+  else
+  {
+    memset(&wave_buffers[0][0], 0, n);
+    memset(&wave_buffers[1][0], 0, n);
+    memset(&wave_buffers[2][0], 0, n);
+    memset(&wave_buffers[3][0], 0, n);
+    memset(&wave_buffers[4][0], 0, n);
+  }
 
   InfoNES_SoundOutput(n,
                       wave_buffers[0], wave_buffers[1], wave_buffers[2],

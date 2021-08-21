@@ -17,7 +17,7 @@ namespace
         while (count)
         {
             char ch = *p++;
-            if (ch == 0)
+            if (ch == 0 || ch == 0x20)
             {
                 return v;
             }

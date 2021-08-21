@@ -38,7 +38,7 @@ namespace
 
     std::unique_ptr<dvi::DVI> dvi_;
 
-    static constexpr uintptr_t NES_FILE_ADDR = 0x10100000;
+    static constexpr uintptr_t NES_FILE_ADDR = 0x10080000;
     static constexpr uintptr_t SRAM_FILE_ADDR = NES_FILE_ADDR - SRAM_SIZE;
 
     ROMSelector romSelector_;
@@ -197,6 +197,11 @@ void InfoNES_SoundClose()
 {
 }
 
+int __not_in_flash_func(InfoNES_GetSoundBufferSize)()
+{
+    return dvi_->getAudioRingBuffer().getFullWritableSize();
+}
+
 void __not_in_flash_func(InfoNES_SoundOutput)(int samples, BYTE *wave1, BYTE *wave2, BYTE *wave3, BYTE *wave4, BYTE *wave5)
 {
     while (samples)
@@ -217,7 +222,7 @@ void __not_in_flash_func(InfoNES_SoundOutput)(int samples, BYTE *wave1, BYTE *wa
             int w3 = *wave3++;
             int w4 = *wave4++;
             int w5 = *wave5++;
-            //w1 = w2 = w4 = 0;
+            //            w3 = w2 = w4 = w5 = 0;
             int l = w1 * 6 + w2 * 3 + w3 * 5 + w4 * 3 + w5 * 2 * 16;
             int r = w1 * 3 + w2 * 6 + w3 * 5 + w4 * 3 + w5 * 2 * 16;
             *p++ = {static_cast<short>(l), static_cast<short>(r)};
@@ -327,23 +332,20 @@ int main()
 
     romSelector_.init(NES_FILE_ADDR);
 
-    //    util::dumpMemory((void *)NES_FILE_ADDR, 1024);
+    util::dumpMemory((void *)NES_FILE_ADDR, 1024);
 
-    /*
-    if (!loadAndReset())
-    {
-        return -1;
-    }
-*/
     //
     dvi_ = std::make_unique<dvi::DVI>(pio0, &dviConfig_, dvi::getTiming640x480p60Hz());
     //    dvi_->setAudioFreq(48000, 25200, 6144);
     dvi_->setAudioFreq(44100, 28000, 6272);
-    dvi_->allocateAudioBuffer(1024);
+    dvi_->allocateAudioBuffer(256);
 
     dvi_->getBlankSettings().top = 4 * 2;
     dvi_->getBlankSettings().bottom = 4 * 2;
     dvi_->setScanLine(true);
+
+    // 空サンプル詰めとく
+    dvi_->getAudioRingBuffer().advanceWritePointer(255);
 
     multicore_launch_core1(core1_main);
 

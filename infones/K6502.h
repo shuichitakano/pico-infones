@@ -54,7 +54,7 @@ typedef unsigned char BYTE;
 void K6502_Init();
 void K6502_Reset();
 void K6502_Set_Int_Wiring(BYTE byNMI_Wiring, BYTE byIRQ_Wiring);
-void K6502_Step(WORD wClocks);
+void K6502_Step(int wClocks);
 
 // I/O Operation (User definition)
 static inline BYTE K6502_Read(WORD wAddr);
@@ -74,6 +74,8 @@ extern BYTE IRQ_State;
 
 // The state of the NMI pin
 extern BYTE NMI_State;
+
+extern WORD PC;
 
 // The number of the clocks that it passed
 //extern WORD g_wPassedClocks;

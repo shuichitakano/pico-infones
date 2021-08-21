@@ -101,7 +101,7 @@
 /*-------------------------------------------------------------------*/
 
 //#define APU_EVENT_MAX 15000
-#define APU_EVENT_MAX 60
+#define APU_EVENT_MAX 100
 
 struct ApuEvent_t
 {
@@ -154,7 +154,7 @@ void ApuWriteControl(WORD addr, BYTE value);
 void InfoNES_pAPUInit(void);
 void InfoNES_pAPUDone(void);
 void InfoNES_pAPUVsync(void);
-void InfoNES_pAPUHsync(void);
+void InfoNES_pAPUHsync(bool enabled);
 
 /*-------------------------------------------------------------------*/
 /*  pAPU Quality resources                                           */
