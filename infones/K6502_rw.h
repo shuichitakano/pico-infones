@@ -18,6 +18,7 @@
 #include "InfoNES_System.h"
 #include "InfoNES_pAPU.h"
 #include <pico.h>
+#include <stdio.h>
 
 /*===================================================================*/
 /*                                                                   */
@@ -219,8 +220,11 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
   switch (wAddr & 0xe000)
   {
   case 0x0000: /* RAM */
-    RAM[wAddr & 0x7ff] = byData;
-    break;
+  {
+    auto addr = wAddr & 0x7ff;
+    RAM[addr] = byData;
+  }
+  break;
 
   case 0x2000: /* PPU */
     switch (wAddr & 0x7)

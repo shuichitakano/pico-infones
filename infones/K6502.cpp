@@ -243,8 +243,8 @@ BYTE NMI_State;
 BYTE NMI_Wiring;
 
 // The number of the clocks that it passed
-WORD g_wPassedClocks;
-WORD g_wCurrentClocks;
+int g_wPassedClocks;
+int g_wCurrentClocks;
 
 WORD getPassedClocks()
 {
@@ -427,29 +427,8 @@ void K6502_Set_Int_Wiring(BYTE byNMI_Wiring, BYTE byIRQ_Wiring)
   IRQ_Wiring = byIRQ_Wiring;
 }
 
-/*===================================================================*/
-/*                                                                   */
-/*  K6502_Step() :                                                   */
-/*          Only the specified number of the clocks execute Op.      */
-/*                                                                   */
-/*===================================================================*/
-void __not_in_flash_func(K6502_Step)(WORD wClocks)
+static void __not_in_flash_func(procNMI)()
 {
-  /*
- *  Only the specified number of the clocks execute Op.
- *
- *  Parameters
- *    WORD wClocks              (Read)
- *      The number of the clocks
- */
-
-  BYTE byCode;
-
-  WORD wA0;
-  BYTE byD0;
-  BYTE byD1;
-  WORD wD0;
-
   // Dispose of it if there is an interrupt requirement
   if (NMI_State != NMI_Wiring)
   {
@@ -483,13 +462,36 @@ void __not_in_flash_func(K6502_Step)(WORD wClocks)
       PC = K6502_ReadW(VECTOR_IRQ);
     }
   }
+}
+
+static void __not_in_flash_func(step)(int wClocks)
+{
+  /*
+ *  Only the specified number of the clocks execute Op.
+ *
+ *  Parameters
+ *    WORD wClocks              (Read)
+ *      The number of the clocks
+ */
+
+  BYTE byCode;
+
+  WORD wA0;
+  BYTE byD0;
+  BYTE byD1;
+  WORD wD0;
 
   // It has a loop until a constant clock passes
   while (g_wPassedClocks < wClocks)
   {
-    // if (PC == 0x824a || PC == 0x8e7b)
+    // if (PC == 0xc449 || PC == 0xc955)
     // {
-    //   printf("%04x:%02x ", PC, A);
+    //   printf("%04x:%02x\n", PC, A);
+    // }
+
+    // if (PC == 0xc44a)
+    // {
+    //   printf("A:%02X X:%02X Y:%02X SP:%02X F:%02X  %04X\n", A, X, Y, SP, F, PC);
     // }
 
     // Read an instruction
@@ -1345,6 +1347,24 @@ void __not_in_flash_func(K6502_Step)(WORD wClocks)
   // Correct the number of the clocks
   g_wCurrentClocks += g_wPassedClocks;
   g_wPassedClocks -= wClocks;
+}
+
+/*===================================================================*/
+/*                                                                   */
+/*  K6502_Step() :                                                   */
+/*          Only the specified number of the clocks execute Op.      */
+/*                                                                   */
+/*===================================================================*/
+void __not_in_flash_func(K6502_Step)(int wClocks)
+{
+  if (NMI_State != NMI_Wiring)
+  {
+    // NMI前に少し実行したい
+    step(7);
+    wClocks -= 7;
+  }
+  procNMI();
+  step(wClocks);
 }
 
 // Addressing Op.

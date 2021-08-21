@@ -92,9 +92,9 @@ BYTE PPU_R7;
 /* Vertical scroll value */
 //BYTE PPU_Scr_V;
 //BYTE PPU_Scr_V_Next;
-BYTE PPU_Scr_V_Byte;
+//BYTE PPU_Scr_V_Byte;
 //BYTE PPU_Scr_V_Byte_Next;
-BYTE PPU_Scr_V_Bit;
+//BYTE PPU_Scr_V_Bit;
 //BYTE PPU_Scr_V_Bit_Next;
 
 /* Horizontal scroll value */
@@ -491,7 +491,7 @@ void InfoNES_SetupPPU()
   // Reset Scroll values
   // PPU_Scr_V = PPU_Scr_V_Next = PPU_Scr_V_Byte = PPU_Scr_V_Byte_Next = PPU_Scr_V_Bit = PPU_Scr_V_Bit_Next = 0;
   // PPU_Scr_H = PPU_Scr_H_Next = PPU_Scr_H_Byte = PPU_Scr_H_Byte_Next = PPU_Scr_H_Bit = PPU_Scr_H_Bit_Next = 0;
-  PPU_Scr_V_Byte = PPU_Scr_V_Bit = 0;
+  // PPU_Scr_V_Byte = PPU_Scr_V_Bit = 0;
   PPU_Scr_H_Byte = PPU_Scr_H_Bit = 0;
 
   // Reset PPU address
@@ -602,14 +602,12 @@ void __not_in_flash_func(InfoNES_Cycle)()
   // Emulation loop
   for (;;)
   {
-    int nStep;
-
     // Set a flag if a scanning line is a hit in the sprite #0
     if (SpriteJustHit == PPU_Scanline &&
         PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN)
     {
       // # of Steps to execute before sprite #0 hit
-      nStep = SPRRAM[SPR_X] * STEP_PER_SCANLINE / NES_DISP_WIDTH;
+      int nStep = SPRRAM[SPR_X] * STEP_PER_SCANLINE / NES_DISP_WIDTH;
 
       // Execute instructions
       K6502_Step(nStep);
@@ -667,14 +665,12 @@ int __not_in_flash_func(InfoNES_HSync)()
  *   -1 : Exit an emulation
  */
 
-  if (!APU_Mute)
-    InfoNES_pAPUHsync();
+  InfoNES_pAPUHsync(!APU_Mute);
 
-  int tmpv = (PPU_Addr >> 12) + ((PPU_Addr >> 5) << 3);
-  tmpv -= PPU_Scanline >= 240 ? 0 : PPU_Scanline;
-
-  PPU_Scr_V_Bit = tmpv & 7;
-  PPU_Scr_V_Byte = (tmpv >> 3) & 31;
+  // int tmpv = (PPU_Addr >> 12) + ((PPU_Addr >> 5) << 3);
+  // tmpv -= PPU_Scanline >= 240 ? 0 : PPU_Scanline;
+  // PPU_Scr_V_Bit = tmpv & 7;
+  // PPU_Scr_V_Byte = (tmpv >> 3) & 31;
   PPU_Scr_H_Byte = PPU_Addr & 31;
   PPU_NameTableBank = NAME_TABLE0 + ((PPU_Addr >> 10) & 3);
 
@@ -774,7 +770,8 @@ int __not_in_flash_func(InfoNES_HSync)()
     FrameCnt = (FrameCnt >= FrameSkip) ? 0 : FrameCnt + 1;
 
     // Set a V-Blank flag
-    PPU_R2 = R2_IN_VBLANK;
+    PPU_R2 |= R2_IN_VBLANK;
+    // printf("vb : pc %04x, r2 %02x\n", PC, PPU_R2);
 
     // Reset latch flag
     PPU_Latch_Flag = 0;

@@ -84,9 +84,9 @@ extern BYTE PPU_R7;
 
 //extern BYTE PPU_Scr_V;
 //extern BYTE PPU_Scr_V_Next;
-extern BYTE PPU_Scr_V_Byte;
+//extern BYTE PPU_Scr_V_Byte;
 //extern BYTE PPU_Scr_V_Byte_Next;
-extern BYTE PPU_Scr_V_Bit;
+//extern BYTE PPU_Scr_V_Bit;
 //extern BYTE PPU_Scr_V_Bit_Next;
 
 //extern BYTE PPU_Scr_H;
@@ -134,11 +134,15 @@ extern BYTE PPU_UpDown_Clip;
 #define SCAN_ON_SCREEN_START 8
 #define SCAN_BOTTOM_OFF_SCREEN_START 232
 #define SCAN_UNKNOWN_START 240
-#define SCAN_VBLANK_START 243
-#define SCAN_VBLANK_END 262
+//#define SCAN_VBLANK_START 242
+#define SCAN_VBLANK_START 241
+//#define SCAN_VBLANK_END 262
+#define SCAN_VBLANK_END 261 // 262-1
 
-#define STEP_PER_SCANLINE 112
-#define STEP_PER_FRAME 29828
+// #define STEP_PER_SCANLINE 112
+// #define STEP_PER_FRAME 29828
+#define STEP_PER_SCANLINE 114 // 113.66
+#define STEP_PER_FRAME 29780 // 29780.5
 
 /* Develop Scroll Registers */
 #if 0
