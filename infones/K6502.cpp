@@ -248,7 +248,7 @@ int g_wCurrentClocks;
 
 WORD getPassedClocks()
 {
-  return g_wPassedClocks + g_wCurrentClocks;
+  return g_wCurrentClocks;
 }
 
 // A table for the test
@@ -480,6 +480,8 @@ static void __not_in_flash_func(step)(int wClocks)
   BYTE byD0;
   BYTE byD1;
   WORD wD0;
+
+  auto prePassedClocks = g_wPassedClocks;
 
   // It has a loop until a constant clock passes
   while (g_wPassedClocks < wClocks)
@@ -1345,7 +1347,7 @@ static void __not_in_flash_func(step)(int wClocks)
   } /* end of while ... */
 
   // Correct the number of the clocks
-  g_wCurrentClocks += g_wPassedClocks;
+  g_wCurrentClocks += (g_wPassedClocks - prePassedClocks);
   g_wPassedClocks -= wClocks;
 }
 
