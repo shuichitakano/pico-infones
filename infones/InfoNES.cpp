@@ -774,7 +774,7 @@ int __not_in_flash_func(InfoNES_HSync)()
     // printf("vb : pc %04x, r2 %02x\n", PC, PPU_R2);
 
     // Reset latch flag
-    PPU_Latch_Flag = 0;
+    // PPU_Latch_Flag = 0;
 
     // pAPU Sound function in V-Sync
     // if (!APU_Mute)
@@ -788,7 +788,10 @@ int __not_in_flash_func(InfoNES_HSync)()
 
     // NMI on V-Blank
     if (PPU_R0 & R0_NMI_VB)
+    {
+      //      printf("nmi %04x %02x\n", PC, PPU_R0);
       NMI_REQ;
+    }
 
     // Exit an emulation if a QUIT button is pushed
     if (PAD_PUSH(PAD_System, PAD_SYS_QUIT))
@@ -1355,7 +1358,8 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     }
 
     // Rendering sprite
-    pPoint -= (NES_DISP_WIDTH - PPU_Scr_H_Bit);
+    pPoint = WorkLine;
+    //   pPoint -= (NES_DISP_WIDTH - PPU_Scr_H_Bit);
 
 #if 1
     compositeSprite(PalTable + 0x10, pSprBuf, pPoint);
