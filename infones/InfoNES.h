@@ -29,6 +29,7 @@ extern BYTE RAM[];
 
 /* SRAM */
 extern BYTE SRAM[];
+extern bool SRAMwritten;
 
 /* ROM */
 extern BYTE *ROM;

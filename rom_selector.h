@@ -11,6 +11,12 @@ inline bool checkNESMagic(const uint8_t *data)
     return memcmp(data, "NES\x1a", 4) == 0;
 }
 
+inline bool hasNVRAM(const uint8_t *data)
+{
+    auto info1 = data[6];
+    return info1 & 2;
+}
+
 class ROMSelector
 {
     const uint8_t *singleROM_{};
@@ -48,6 +54,32 @@ public:
             return entries_[selectedIndex_].data;
         }
         return {};
+    }
+
+    int getCurrentNVRAMSlot() const
+    {
+        auto currentROM = getCurrentROM();
+        if (!currentROM)
+        {
+            return -1;
+        }
+        if (!hasNVRAM(currentROM))
+        {
+            return -1;
+        }
+        if (singleROM_)
+        {
+            return 0;
+        }
+        int slot = 0;
+        for (int i = 0; i < selectedIndex_; ++i)
+        {
+            if (hasNVRAM(entries_[i].data))
+            {
+                ++slot;
+            }
+        }
+        return slot;
     }
 
     void next()

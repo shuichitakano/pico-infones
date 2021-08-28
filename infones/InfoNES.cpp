@@ -53,6 +53,7 @@ BYTE RAM[RAM_SIZE];
 
 /* SRAM */
 BYTE SRAM[SRAM_SIZE];
+bool SRAMwritten = false;
 
 /* ROM */
 BYTE *ROM;
