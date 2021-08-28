@@ -42,6 +42,7 @@ PRIVATE
     hardware_timer
     hardware_clocks
     hardware_pwm
+    hardware_flash
     dvi
     infones
 

@@ -10,9 +10,11 @@
 #include "hardware/vreg.h"
 #include <hardware/sync.h>
 #include <pico/multicore.h>
+#include <hardware/flash.h>
 #include <memory>
 #include <math.h>
 #include <util/dump_bin.h>
+#include <util/exclusive_proc.h>
 #include <string.h>
 #include <stdarg.h>
 #include <algorithm>
@@ -39,9 +41,9 @@ namespace
     std::unique_ptr<dvi::DVI> dvi_;
 
     static constexpr uintptr_t NES_FILE_ADDR = 0x10080000;
-    static constexpr uintptr_t SRAM_FILE_ADDR = NES_FILE_ADDR - SRAM_SIZE;
 
     ROMSelector romSelector_;
+    util::ExclusiveProc exclProc_;
 }
 
 const WORD __not_in_flash_func(NesPalette)[64] = {
@@ -53,6 +55,57 @@ const WORD __not_in_flash_func(NesPalette)[64] = {
     0x7ae7, 0x4342, 0x2769, 0x2ff3, 0x03bb, 0x0000, 0x0000, 0x0000,
     0x7fff, 0x579f, 0x635f, 0x6b3f, 0x7f1f, 0x7f1b, 0x7ef6, 0x7f75,
     0x7f94, 0x73f4, 0x57d7, 0x5bf9, 0x4ffe, 0x0000, 0x0000, 0x0000};
+
+uint32_t getCurrentNVRAMAddr()
+{
+    if (!romSelector_.getCurrentROM())
+    {
+        return {};
+    }
+    int slot = romSelector_.getCurrentNVRAMSlot();
+    if (slot < 0)
+    {
+        return {};
+    }
+    printf("SRAM slot %d\n", slot);
+    return NES_FILE_ADDR - SRAM_SIZE * (slot + 1);
+}
+
+void saveNVRAM()
+{
+    if (!SRAMwritten)
+    {
+        printf("SRAM not updated.\n");
+        return;
+    }
+
+    printf("save SRAM\n");
+    exclProc_.setProcAndWait([] {
+        static_assert((SRAM_SIZE & (FLASH_SECTOR_SIZE - 1)) == 0);
+        if (auto addr = getCurrentNVRAMAddr())
+        {
+            auto ofs = addr - XIP_BASE;
+            printf("write flash %x\n", ofs);
+            {
+                flash_range_erase(ofs, SRAM_SIZE);
+                flash_range_program(ofs, SRAM, SRAM_SIZE);
+            }
+        }
+    });
+    printf("done\n");
+
+    SRAMwritten = false;
+}
+
+void loadNVRAM()
+{
+    if (auto addr = getCurrentNVRAMAddr())
+    {
+        printf("load SRAM %x\n", addr);
+        memcpy(SRAM, reinterpret_cast<void *>(addr), SRAM_SIZE);
+    }
+    SRAMwritten = false;
+}
 
 void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
 {
@@ -117,16 +170,19 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
         {
             if (pushed & LEFT)
             {
+                saveNVRAM();
                 romSelector_.prev();
                 reset = true;
             }
             if (pushed & RIGHT)
             {
+                saveNVRAM();
                 romSelector_.next();
                 reset = true;
             }
             if ((pushed & START) && (p1 & A) && (p1 & B))
             {
+                saveNVRAM();
                 reset = true;
             }
         }
@@ -289,6 +345,7 @@ bool loadAndReset()
         printf("NES file parse error.\n");
         return false;
     }
+    loadNVRAM();
 
     if (InfoNES_Reset() < 0)
     {
@@ -308,11 +365,22 @@ int InfoNES_Menu()
 
 void __not_in_flash_func(core1_main)()
 {
-    dvi_->registerIRQThisCore();
-    dvi_->waitForValidLine();
+    while (true)
+    {
+        dvi_->registerIRQThisCore();
+        dvi_->waitForValidLine();
 
-    dvi_->start();
-    dvi_->loopScanBuffer15bpp();
+        dvi_->start();
+        while (!exclProc_.isExist())
+        {
+            dvi_->convertScanBuffer15bpp();
+        }
+
+        dvi_->unregisterIRQThisCore();
+        dvi_->stop();
+
+        exclProc_.processOrWaitIfExist();
+    }
 }
 
 int main()
@@ -339,6 +407,7 @@ int main()
     //    dvi_->setAudioFreq(48000, 25200, 6144);
     dvi_->setAudioFreq(44100, 28000, 6272);
     dvi_->allocateAudioBuffer(256);
+    //    dvi_->setExclusiveProc(&exclProc_);
 
     dvi_->getBlankSettings().top = 4 * 2;
     dvi_->getBlankSettings().bottom = 4 * 2;

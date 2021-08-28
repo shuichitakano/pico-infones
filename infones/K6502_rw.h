@@ -460,6 +460,7 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
 
   case 0x6000: /* SRAM */
     SRAM[wAddr & 0x1fff] = byData;
+    SRAMwritten = true;
 
     /* Write to SRAM, when no SRAM */
     if (!ROM_SRAM)
