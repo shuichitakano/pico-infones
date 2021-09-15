@@ -76,6 +76,6 @@ int InfoNES_GetSoundBufferSize();
 void InfoNES_MessageBox(const char *pszMsg, ...);
 
 void InfoNES_PreDrawLine(int line);
-void InfoNES_PostDrawLine();
+void InfoNES_PostDrawLine(int line);
 
 #endif /* !InfoNES_SYSTEM_H_INCLUDED */

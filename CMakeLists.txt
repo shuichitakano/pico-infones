@@ -44,6 +44,7 @@ PRIVATE
     hardware_pwm
     hardware_flash
     dvi
+    util
     infones
 
     tinyusb_host
@@ -57,6 +58,7 @@ PRIVATE
 )
 
 add_subdirectory(pico_lib/dvi)
+add_subdirectory(pico_lib/util)
 add_subdirectory(infones)
 
 pico_add_extra_outputs(picones)

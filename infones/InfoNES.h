@@ -38,10 +38,15 @@ extern BYTE *ROM;
 extern BYTE *SRAMBANK;
 
 /* ROM BANK ( 8Kb * 4 ) */
-extern BYTE *ROMBANK0;
-extern BYTE *ROMBANK1;
-extern BYTE *ROMBANK2;
-extern BYTE *ROMBANK3;
+extern BYTE *ROMBANK[4];
+// extern BYTE *ROMBANK0;
+// extern BYTE *ROMBANK1;
+// extern BYTE *ROMBANK2;
+// extern BYTE *ROMBANK3;
+#define ROMBANK0 (ROMBANK[0])
+#define ROMBANK1 (ROMBANK[1])
+#define ROMBANK2 (ROMBANK[2])
+#define ROMBANK3 (ROMBANK[3])
 
 /*-------------------------------------------------------------------*/
 /*  PPU resources                                                    */

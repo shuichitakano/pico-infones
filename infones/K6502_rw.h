@@ -68,6 +68,11 @@ static inline BYTE __not_in_flash_func(K6502_Read)(WORD wAddr)
  */
   BYTE byRet;
 
+  if (wAddr >= 0x8000)
+  {
+    return ROMBANK[(wAddr - 0x8000) >> 13][wAddr & 0x1fff];
+  }
+
   switch (wAddr & 0xe000)
   {
   case 0x0000: /* RAM */
@@ -174,17 +179,17 @@ static inline BYTE __not_in_flash_func(K6502_Read)(WORD wAddr)
       return SRAMBANK[wAddr & 0x1fff];
     }
 
-  case 0x8000: /* ROM BANK 0 */
-    return ROMBANK0[wAddr & 0x1fff];
+    // case 0x8000: /* ROM BANK 0 */
+    //   return ROMBANK0[wAddr & 0x1fff];
 
-  case 0xa000: /* ROM BANK 1 */
-    return ROMBANK1[wAddr & 0x1fff];
+    // case 0xa000: /* ROM BANK 1 */
+    //   return ROMBANK1[wAddr & 0x1fff];
 
-  case 0xc000: /* ROM BANK 2 */
-    return ROMBANK2[wAddr & 0x1fff];
+    // case 0xc000: /* ROM BANK 2 */
+    //   return ROMBANK2[wAddr & 0x1fff];
 
-  case 0xe000: /* ROM BANK 3 */
-    return ROMBANK3[wAddr & 0x1fff];
+    // case 0xe000: /* ROM BANK 3 */
+    //   return ROMBANK3[wAddr & 0x1fff];
   }
 
   return (wAddr >> 8); /* when a register is not readable the upper half
