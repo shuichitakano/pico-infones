@@ -15,6 +15,7 @@
 #include <math.h>
 #include <util/dump_bin.h>
 #include <util/exclusive_proc.h>
+#include <util/work_meter.h>
 #include <string.h>
 #include <stdarg.h>
 #include <algorithm>
@@ -32,6 +33,8 @@ const uint LED_PIN = PICO_DEFAULT_LED_PIN;
 
 namespace
 {
+    constexpr uint32_t CPUFreqKHz = 252000;
+
     constexpr dvi::Config dviConfig_ = {
         .pinTMDS = {10, 12, 14},
         .pinClock = 8,
@@ -279,8 +282,8 @@ void __not_in_flash_func(InfoNES_SoundOutput)(int samples, BYTE *wave1, BYTE *wa
             int w4 = *wave4++;
             int w5 = *wave5++;
             //            w3 = w2 = w4 = w5 = 0;
-            int l = w1 * 6 + w2 * 3 + w3 * 5 + w4 * 3 + w5 * 2 * 16;
-            int r = w1 * 3 + w2 * 6 + w3 * 5 + w4 * 3 + w5 * 2 * 16;
+            int l = w1 * 6 + w2 * 3 + w3 * 5 + w4 * 3 * 17 + w5 * 2 * 32;
+            int r = w1 * 3 + w2 * 6 + w3 * 5 + w4 * 3 * 17 + w5 * 2 * 32;
             *p++ = {static_cast<short>(l), static_cast<short>(r)};
 
             // pulse_out = 0.00752 * (pulse1 + pulse2)
@@ -304,7 +307,7 @@ extern WORD PC;
 
 void InfoNES_LoadFrame()
 {
-    gpio_put(LED_PIN, (dvi_->getFrameCounter() / 60) & 1);
+    gpio_put(LED_PIN, hw_divider_s32_quotient_inlined(dvi_->getFrameCounter(), 60) & 1);
     //    printf("%04x\n", PC);
 
     tuh_task();
@@ -315,19 +318,61 @@ namespace
     dvi::DVI::LineBuffer *currentLineBuffer_{};
 }
 
+void __not_in_flash_func(drawWorkMeterUnit)(int timing,
+                                            [[maybe_unused]] int span,
+                                            uint32_t tag)
+{
+    if (timing >= 0 && timing < 640)
+    {
+        auto p = currentLineBuffer_->data();
+        p[timing] = tag; // tag = color
+    }
+}
+
+void __not_in_flash_func(drawWorkMeter)(int line)
+{
+    if (!currentLineBuffer_)
+    {
+        return;
+    }
+
+    memset(currentLineBuffer_->data(), 0, 64);
+    memset(&currentLineBuffer_->data()[320 - 32], 0, 64);
+    (*currentLineBuffer_)[160] = 0;
+    if (line == 4)
+    {
+        for (int i = 1; i < 10; ++i)
+        {
+            (*currentLineBuffer_)[16 * i] = 31;
+        }
+    }
+
+    constexpr uint32_t clocksPerLine = 800 * 10;
+    constexpr uint32_t meterScale = 160 * 65536 / (clocksPerLine * 2);
+    util::WorkMeterEnum(meterScale, 1, drawWorkMeterUnit);
+    //    util::WorkMeterEnum(160, clocksPerLine * 2, drawWorkMeterUnit);
+}
+
 void __not_in_flash_func(InfoNES_PreDrawLine)(int line)
 {
+    util::WorkMeterMark(0xaaaa);
     auto b = dvi_->getLineBuffer();
+    util::WorkMeterMark(0x5555);
     InfoNES_SetLineBuffer(b->data() + 32, b->size());
     //    (*b)[319] = line + dvi_->getFrameCounter();
 
     currentLineBuffer_ = b;
 }
 
-void __not_in_flash_func(InfoNES_PostDrawLine)()
+void __not_in_flash_func(InfoNES_PostDrawLine)(int line)
 {
+#ifndef NDEBUG
+    util::WorkMeterMark(0xffff);
+    drawWorkMeter(line);
+#endif
+
     assert(currentLineBuffer_);
-    dvi_->setLineBuffer(currentLineBuffer_);
+    dvi_->setLineBuffer(line, currentLineBuffer_);
     currentLineBuffer_ = nullptr;
 }
 
@@ -387,8 +432,7 @@ int main()
 {
     vreg_set_voltage(VREG_VOLTAGE_1_20);
     sleep_ms(10);
-    //    set_sys_clock_khz(251750, true);
-    set_sys_clock_khz(252000, true);
+    set_sys_clock_khz(CPUFreqKHz, true);
 
     stdio_init_all();
 

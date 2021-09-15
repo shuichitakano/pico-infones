@@ -728,8 +728,28 @@ static void __not_in_flash_func(step)(int wClocks)
       break;
 
     case 0x4C: // JMP Abs
+#if 0
       JMP(AA_ABS);
       CLK(3);
+#else
+    {
+      auto addr = AA_ABS;
+      if (addr == PC - 3)
+      {
+        JMP(addr);
+        do
+        {
+          CLK(3);
+        } while (g_wPassedClocks < wClocks);
+        break;
+      }
+      else
+      {
+        JMP(addr);
+        CLK(3);
+      }
+    }
+#endif
       break;
 
     case 0x4D: // EOR Abs

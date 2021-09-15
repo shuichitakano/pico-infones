@@ -44,6 +44,21 @@
 #include <pico.h>
 #include <tuple>
 
+#include <util/work_meter.h>
+
+constexpr uint16_t makeTag(int r, int g, int b)
+{
+  return (r << 10) | (g << 5) | (b);
+}
+enum
+{
+  MARKER_START = makeTag(0, 31, 31),
+  MARKER_CPU = makeTag(0, 31, 0),
+  MARKER_SOUND = makeTag(31, 31, 0),
+  MARKER_BG = makeTag(0, 0, 31),
+  MARKER_SPRITE = makeTag(31, 0, 0),
+};
+
 /*-------------------------------------------------------------------*/
 /*  NES resources                                                    */
 /*-------------------------------------------------------------------*/
@@ -62,10 +77,11 @@ BYTE *ROM;
 BYTE *SRAMBANK;
 
 /* ROM BANK ( 8Kb * 4 ) */
-BYTE *ROMBANK0;
-BYTE *ROMBANK1;
-BYTE *ROMBANK2;
-BYTE *ROMBANK3;
+BYTE *ROMBANK[4];
+// BYTE *ROMBANK0;
+// BYTE *ROMBANK1;
+// BYTE *ROMBANK2;
+// BYTE *ROMBANK3;
 
 /*-------------------------------------------------------------------*/
 /*  PPU resources                                                    */
@@ -603,6 +619,8 @@ void __not_in_flash_func(InfoNES_Cycle)()
   // Emulation loop
   for (;;)
   {
+    util::WorkMeterMark(MARKER_START);
+
     // Set a flag if a scanning line is a hit in the sprite #0
     if (SpriteJustHit == PPU_Scanline &&
         PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN)
@@ -639,6 +657,8 @@ void __not_in_flash_func(InfoNES_Cycle)()
       APU_Reg[0x4015] |= 0x40;
     }
 
+    util::WorkMeterMark(MARKER_CPU);
+
     // A mapper function in H-Sync
     MapperHSync();
 
@@ -667,6 +687,7 @@ int __not_in_flash_func(InfoNES_HSync)()
  */
 
   InfoNES_pAPUHsync(!APU_Mute);
+  util::WorkMeterMark(MARKER_SOUND);
 
   // int tmpv = (PPU_Addr >> 12) + ((PPU_Addr >> 5) << 3);
   // tmpv -= PPU_Scanline >= 240 ? 0 : PPU_Scanline;
@@ -685,10 +706,12 @@ int __not_in_flash_func(InfoNES_HSync)()
     {
       InfoNES_PreDrawLine(PPU_Scanline);
       InfoNES_DrawLine();
-      InfoNES_PostDrawLine();
+      InfoNES_PostDrawLine(PPU_Scanline);
     }
     // todo: 描画しないラインにもスプライトオーバーレジスタとかは反映する必要がある
   }
+
+  util::WorkMeterReset(); // 計測起点はここ
 
   /*-------------------------------------------------------------------*/
   /*  Set new scroll values                                            */
@@ -1152,6 +1175,8 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     }
   }
 
+  util::WorkMeterMark(MARKER_BG);
+
   /*-------------------------------------------------------------------*/
   /*  Render a sprite                                                  */
   /*-------------------------------------------------------------------*/
@@ -1412,6 +1437,8 @@ void __not_in_flash_func(InfoNES_DrawLine)()
 
     if (nSprCnt >= 8)
       PPU_R2 |= R2_MAX_SP; // Set a flag of maximum sprites on scanline
+
+    util::WorkMeterMark(MARKER_SPRITE);
   }
 }
 
