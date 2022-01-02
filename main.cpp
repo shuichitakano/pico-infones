@@ -4,6 +4,7 @@
 #include "hardware/divider.h"
 #include "hardware/dma.h"
 #include "hardware/pio.h"
+#include "hardware/i2c.h"
 #include "hardware/interp.h"
 #include "hardware/timer.h"
 #include "hardware/clocks.h"
@@ -31,14 +32,25 @@
 
 const uint LED_PIN = PICO_DEFAULT_LED_PIN;
 
+#ifndef DVICONFIG
+//#define DVICONFIG dviConfig_PicoDVI
+#define DVICONFIG dviConfig_PicoDVISock
+#endif
+
 namespace
 {
     constexpr uint32_t CPUFreqKHz = 252000;
 
-    constexpr dvi::Config dviConfig_ = {
+    constexpr dvi::Config dviConfig_PicoDVI = {
         .pinTMDS = {10, 12, 14},
         .pinClock = 8,
         .invert = true,
+    };
+
+    constexpr dvi::Config dviConfig_PicoDVISock = {
+        .pinTMDS = {12, 18, 16},
+        .pinClock = 14,
+        .invert = false,
     };
 
     std::unique_ptr<dvi::DVI> dvi_;
@@ -47,17 +59,60 @@ namespace
 
     ROMSelector romSelector_;
     util::ExclusiveProc exclProc_;
+
+    enum class ScreenMode
+    {
+        SCANLINE_8_7,
+        NOSCANLINE_8_7,
+        SCANLINE_1_1,
+        NOSCANLINE_1_1,
+        MAX,
+    };
+    ScreenMode screenMode_{};
+
+    bool scaleMode8_7_ = true;
+
+    void applyScreenMode()
+    {
+        bool scanLine = false;
+
+        switch (screenMode_)
+        {
+        case ScreenMode::SCANLINE_1_1:
+            scaleMode8_7_ = false;
+            scanLine = true;
+            break;
+
+        case ScreenMode::SCANLINE_8_7:
+            scaleMode8_7_ = true;
+            scanLine = true;
+            break;
+
+        case ScreenMode::NOSCANLINE_1_1:
+            scaleMode8_7_ = false;
+            scanLine = false;
+            break;
+
+        case ScreenMode::NOSCANLINE_8_7:
+            scaleMode8_7_ = true;
+            scanLine = false;
+            break;
+        }
+
+        dvi_->setScanLine(scanLine);
+    }
 }
 
+#define CC(x) (((x >> 1) & 15) | (((x >> 6) & 15) << 4) | (((x >> 11) & 15) << 8))
 const WORD __not_in_flash_func(NesPalette)[64] = {
-    0x39ce, 0x1071, 0x0015, 0x2013, 0x440e, 0x5402, 0x5000, 0x3c20,
-    0x20a0, 0x0100, 0x0140, 0x00e2, 0x0ceb, 0x0000, 0x0000, 0x0000,
-    0x5ef7, 0x01dd, 0x10fd, 0x401e, 0x5c17, 0x700b, 0x6ca0, 0x6521,
-    0x45c0, 0x0240, 0x02a0, 0x0247, 0x0211, 0x0000, 0x0000, 0x0000,
-    0x7fff, 0x1eff, 0x2e5f, 0x223f, 0x79ff, 0x7dd6, 0x7dcc, 0x7e67,
-    0x7ae7, 0x4342, 0x2769, 0x2ff3, 0x03bb, 0x0000, 0x0000, 0x0000,
-    0x7fff, 0x579f, 0x635f, 0x6b3f, 0x7f1f, 0x7f1b, 0x7ef6, 0x7f75,
-    0x7f94, 0x73f4, 0x57d7, 0x5bf9, 0x4ffe, 0x0000, 0x0000, 0x0000};
+    CC(0x39ce), CC(0x1071), CC(0x0015), CC(0x2013), CC(0x440e), CC(0x5402), CC(0x5000), CC(0x3c20),
+    CC(0x20a0), CC(0x0100), CC(0x0140), CC(0x00e2), CC(0x0ceb), CC(0x0000), CC(0x0000), CC(0x0000),
+    CC(0x5ef7), CC(0x01dd), CC(0x10fd), CC(0x401e), CC(0x5c17), CC(0x700b), CC(0x6ca0), CC(0x6521),
+    CC(0x45c0), CC(0x0240), CC(0x02a0), CC(0x0247), CC(0x0211), CC(0x0000), CC(0x0000), CC(0x0000),
+    CC(0x7fff), CC(0x1eff), CC(0x2e5f), CC(0x223f), CC(0x79ff), CC(0x7dd6), CC(0x7dcc), CC(0x7e67),
+    CC(0x7ae7), CC(0x4342), CC(0x2769), CC(0x2ff3), CC(0x03bb), CC(0x0000), CC(0x0000), CC(0x0000),
+    CC(0x7fff), CC(0x579f), CC(0x635f), CC(0x6b3f), CC(0x7f1f), CC(0x7f1b), CC(0x7ef6), CC(0x7f75),
+    CC(0x7f94), CC(0x73f4), CC(0x57d7), CC(0x5bf9), CC(0x4ffe), CC(0x0000), CC(0x0000), CC(0x0000)};
 
 uint32_t getCurrentNVRAMAddr()
 {
@@ -83,7 +138,8 @@ void saveNVRAM()
     }
 
     printf("save SRAM\n");
-    exclProc_.setProcAndWait([] {
+    exclProc_.setProcAndWait([]
+                             {
         static_assert((SRAM_SIZE & (FLASH_SECTOR_SIZE - 1)) == 0);
         if (auto addr = getCurrentNVRAMAddr())
         {
@@ -93,8 +149,7 @@ void saveNVRAM()
                 flash_range_erase(ofs, SRAM_SIZE);
                 flash_range_program(ofs, SRAM, SRAM_SIZE);
             }
-        }
-    });
+        } });
     printf("done\n");
 
     SRAMwritten = false;
@@ -121,54 +176,39 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
     static constexpr int A = 1 << 0;
     static constexpr int B = 1 << 1;
 
-    static DWORD prevP1 = 0;
+    static DWORD prevButtons[2]{};
+    static int rapidFireMask[2]{};
+    static int rapidFireCounter = 0;
+
+    ++rapidFireCounter;
+    bool reset = false;
 
     for (int i = 0; i < 2; ++i)
     {
         auto &dst = i == 0 ? *pdwPad1 : *pdwPad2;
         auto &gp = io::getCurrentGamePadState(i);
-        dst = 0;
 
-        if (gp.axis[0] < 64)
-        {
-            dst |= LEFT;
-        }
-        else if (gp.axis[0] > 192)
-        {
-            dst |= RIGHT;
-        }
+        int v = (gp.buttons & io::GamePadState::Button::LEFT ? LEFT : 0) |
+                (gp.buttons & io::GamePadState::Button::RIGHT ? RIGHT : 0) |
+                (gp.buttons & io::GamePadState::Button::UP ? UP : 0) |
+                (gp.buttons & io::GamePadState::Button::DOWN ? DOWN : 0) |
+                (gp.buttons & io::GamePadState::Button::A ? A : 0) |
+                (gp.buttons & io::GamePadState::Button::B ? B : 0) |
+                (gp.buttons & io::GamePadState::Button::SELECT ? SELECT : 0) |
+                (gp.buttons & io::GamePadState::Button::START ? START : 0) |
+                0;
 
-        if (gp.axis[1] < 64)
+        int rv = v;
+        if (rapidFireCounter & 2)
         {
-            dst |= UP;
-        }
-        else if (gp.axis[1] > 192)
-        {
-            dst |= DOWN;
+            // 15 fire/sec
+            rv &= ~rapidFireMask[i];
         }
 
-        if (gp.buttons & 0x40)
-        {
-            dst |= SELECT;
-        }
-        if (gp.buttons & 0x80)
-        {
-            dst |= START;
-        }
-        if (gp.buttons & 0x01)
-        {
-            dst |= A;
-        }
-        if (gp.buttons & 0x02)
-        {
-            dst |= B;
-        }
-    }
+        dst = rv;
 
-    bool reset = false;
-    {
-        auto p1 = *pdwPad1;
-        auto pushed = p1 & ~prevP1;
+        auto p1 = v;
+        auto pushed = v & ~prevButtons[i];
         if (p1 & SELECT)
         {
             if (pushed & LEFT)
@@ -183,16 +223,35 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
                 romSelector_.next();
                 reset = true;
             }
-            if ((pushed & START) && (p1 & A) && (p1 & B))
+            if (pushed & START)
             {
                 saveNVRAM();
                 reset = true;
             }
+            if (pushed & A)
+            {
+                rapidFireMask[i] ^= io::GamePadState::Button::A;
+            }
+            if (pushed & B)
+            {
+                rapidFireMask[i] ^= io::GamePadState::Button::B;
+            }
+            if (pushed & UP)
+            {
+                screenMode_ = static_cast<ScreenMode>((static_cast<int>(screenMode_) - 1) & 3);
+                applyScreenMode();
+            }
+            else if (pushed & DOWN)
+            {
+                screenMode_ = static_cast<ScreenMode>((static_cast<int>(screenMode_) + 1) & 3);
+                applyScreenMode();
+            }
         }
+
+        prevButtons[i] = v;
     }
 
     *pdwSystem = reset ? PAD_SYS_QUIT : 0;
-    prevP1 = *pdwPad1;
 }
 
 void InfoNES_MessageBox(const char *pszMsg, ...)
@@ -366,7 +425,7 @@ void __not_in_flash_func(InfoNES_PreDrawLine)(int line)
 
 void __not_in_flash_func(InfoNES_PostDrawLine)(int line)
 {
-#ifndef NDEBUG
+#if !defined(NDEBUG)
     util::WorkMeterMark(0xffff);
     drawWorkMeter(line);
 #endif
@@ -418,7 +477,16 @@ void __not_in_flash_func(core1_main)()
         dvi_->start();
         while (!exclProc_.isExist())
         {
-            dvi_->convertScanBuffer15bpp();
+            if (scaleMode8_7_)
+            {
+                dvi_->convertScanBuffer12bppScaled16_7(34, 32, 288 * 2);
+                // 34 + 252 + 34
+                // 32 + 576 + 32
+            }
+            else
+            {
+                dvi_->convertScanBuffer12bpp();
+            }
         }
 
         dvi_->unregisterIRQThisCore();
@@ -444,10 +512,48 @@ int main()
 
     romSelector_.init(NES_FILE_ADDR);
 
-    util::dumpMemory((void *)NES_FILE_ADDR, 1024);
+    // util::dumpMemory((void *)NES_FILE_ADDR, 1024);
+
+#if 0
+    //
+    auto *i2c = i2c0;
+    static constexpr int I2C_SDA_PIN = 16;
+    static constexpr int I2C_SCL_PIN = 17;
+    i2c_init(i2c, 100 * 1000);
+    gpio_set_function(I2C_SDA_PIN, GPIO_FUNC_I2C);
+    gpio_set_function(I2C_SCL_PIN, GPIO_FUNC_I2C);
+    // gpio_pull_up(I2C_SDA_PIN);
+    // gpio_pull_up(I2C_SCL_PIN);
+    i2c_set_slave_mode(i2c, false, 0);
+
+    {
+        constexpr int addrSegmentPointer = 0x60 >> 1;
+        constexpr int addrEDID = 0xa0 >> 1;
+        constexpr int addrDisplayID = 0xa4 >> 1;
+
+        uint8_t buf[128];
+        int addr = 0;
+        do
+        {
+            printf("addr: %04x\n", addr);
+            uint8_t tmp = addr >> 8;
+            i2c_write_blocking(i2c, addrSegmentPointer, &tmp, 1, false);
+
+            tmp = addr & 255;
+            i2c_write_blocking(i2c, addrEDID, &tmp, 1, true);
+            i2c_read_blocking(i2c, addrEDID, buf, 128, false);
+
+            util::dumpMemory(buf, 128);
+            printf("\n");
+
+            addr += 128;
+        } while (buf[126]); 
+    }
+#endif
 
     //
-    dvi_ = std::make_unique<dvi::DVI>(pio0, &dviConfig_, dvi::getTiming640x480p60Hz());
+    dvi_ = std::make_unique<dvi::DVI>(pio0, &DVICONFIG,
+                                      dvi::getTiming640x480p60Hz());
     //    dvi_->setAudioFreq(48000, 25200, 6144);
     dvi_->setAudioFreq(44100, 28000, 6272);
     dvi_->allocateAudioBuffer(256);
@@ -455,7 +561,9 @@ int main()
 
     dvi_->getBlankSettings().top = 4 * 2;
     dvi_->getBlankSettings().bottom = 4 * 2;
-    dvi_->setScanLine(true);
+    // dvi_->setScanLine(true);
+
+    applyScreenMode();
 
     // 空サンプル詰めとく
     dvi_->getAudioRingBuffer().advanceWritePointer(255);
