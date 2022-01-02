@@ -15,6 +15,7 @@ pico_sdk_init()
 add_executable(picones
     main.cpp
     hid_app.cpp
+    gamepad.cpp
     tar.cpp
 )
 
@@ -38,6 +39,7 @@ PRIVATE
     pico_multicore
     hardware_dma
     hardware_pio
+    hardware_i2c
     hardware_interp
     hardware_timer
     hardware_clocks
