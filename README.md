@@ -4,7 +4,8 @@ This software is a port of InfoNES, a NES emulator, for the Raspberry Pi Pico, a
 The code for HDMI output is based on [PicoDVI](https://github.com/Wren6991/PicoDVI).
 
 ## Wiring
-The default pinout of the HDMI connector follows the [Pico-DVI-Sock](https://github.com/Wren6991/Pico-DVI-Sock).
+The default pinout of the HDMI connector follows the [Pico-DVI-Sock](https://github.com/Wren6991/Pico-DVI-Sock). 
+Some TVs will not recognize the signal unless you input 5V to pin 18 of the HDMI connector.
 
 The controller should be connected to the micro USB port of the Raspberry Pi Pico via an OTG adapter.
 
