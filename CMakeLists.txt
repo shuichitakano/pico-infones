@@ -30,7 +30,11 @@ set(FAMILY rp2040)
 set(BOARD pico_sdk)
 set(TINYUSB_DEBUG_LEVE 0)
 include(${PICO_TINYUSB_PATH}/hw/bsp/${FAMILY}/family.cmake)
-family_configure_target(picones)
+if (PICO_SDK_VERSION_MAJOR LESS 2)
+    family_configure_target(picones)
+else()
+    family_configure_target(picones "" )
+endif()
 # add_compile_definitions(CFG_TUSB_DEBUG=0)
 
 target_link_libraries(picones
